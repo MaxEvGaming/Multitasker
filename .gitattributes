@@ -1,0 +1,17 @@
+# Anything the server runs must keep Unix line endings. A shell script checked
+# out with CRLF fails with a confusing "\r: command not found", and a .ps1 read
+# as the wrong encoding fails at parse time — both were hit while building this.
+*.sh    text eol=lf
+*.js    text eol=lf
+*.sql   text eol=lf
+*.json  text eol=lf
+*.html  text eol=lf
+*.css   text eol=lf
+*.md    text eol=lf
+
+# Windows PowerShell 5.1 reads a BOM-less .ps1 as the system codepage, which
+# mangles anything non-ASCII. These are stored with a BOM on purpose.
+*.ps1   text eol=crlf working-tree-encoding=UTF-8
+
+*.png   binary
+*.pem   binary

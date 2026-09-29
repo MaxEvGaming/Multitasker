@@ -1,0 +1,23 @@
+{
+  "name": "multitasker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Multitasker — a board that rings your phone when Claude Code stops. Put a command on a square and it doubles as a Stream Deck that drives your PC from your phone. Works as a plain task board or a Pomodoro timer too.",
+  "license": "MIT",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "migrate": "node src/migrate.js",
+    "vapid": "node src/vapid.js",
+    "reset": "node src/reset.js",
+    "invite": "node src/invite.js"
+  },
+  "dependencies": {
+    "pg": "^8.13.1",
+    "web-push": "^3.6.7"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

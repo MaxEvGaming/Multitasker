@@ -1,0 +1,356 @@
+:root {
+  color-scheme: dark;
+  --bg: #14161b;
+  --panel: #1d2028;
+  --edge: #2e323c;
+  --ink: #e8e6e3;
+  --dim: #9a9691;
+  --accent: #d67756;
+}
+
+* { box-sizing: border-box; }
+
+/* `hidden` has to mean hidden. The browser's own rule for it is
+   `[hidden] { display: none }` at the weakest weight there is, so any rule
+   here that sets `display` on the same element wins, and the element stays on
+   screen while the script that set `.hidden = true` believes it has gone.
+   That is not hypothetical: `.editor label` (display: grid) left every command
+   field of a square's editor on show, and `.steps button` (display:
+   inline-block) keeps step ③'s Connect button on a phone, where it is meant to
+   disappear in favour of the sentence. Said once, here, with the weight to win
+   wherever it happens — including rules written later. Nothing in this app
+   shows an element by giving a `display` to something marked hidden, so there
+   is nothing for this to break. */
+[hidden] { display: none !important; }
+
+body {
+  margin: 0;
+  padding: 16px 14px 40px;
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+h1 { font-size: 19px; margin: 0; }
+h2 { font-size: 15px; margin: 0 0 6px; color: var(--accent); }
+
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin-bottom: 14px;
+}
+
+/* The settings page is long enough that the way out scrolls off the top, which
+   leaves no obvious way back to the board. Pinned to the top instead, with the
+   page's own background behind it so the content passes underneath rather than
+   through it. The negative margins let that background reach the edges of the
+   body's padding. */
+.panel > header {
+  position: sticky; top: 0; z-index: 5;
+  background: var(--bg);
+  margin: -16px -14px 14px; padding: 16px 14px 10px;
+  border-bottom: 1px solid var(--edge);
+}
+.header-actions { display: flex; gap: 8px; }
+
+.note { color: var(--dim); font-size: 13px; margin: 4px 0 10px; }
+.error { color: #e06c5a; min-height: 1.4em; }
+
+button {
+  font: inherit; font-weight: 600; color: #14161b; background: var(--accent);
+  border: 0; border-radius: 10px; padding: 11px 14px; cursor: pointer;
+}
+button.ghost { background: var(--edge); color: var(--ink); font-weight: 500; }
+button.link { background: none; color: var(--dim); font-weight: 500; padding: 6px; }
+
+/* Secondary enough to be an icon, permanent enough to want a confirmation. */
+button.icon {
+  background: var(--edge); color: var(--dim);
+  padding: 0; width: 38px; height: 38px;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+button.icon svg {
+  width: 20px; height: 20px;
+  fill: none; stroke: currentColor; stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+button.icon:active { color: var(--ink); }
+
+input, select, textarea {
+  /* 16px exactly. Below that, iOS Safari zooms the page the moment a field is
+     focused, which pushes the save button off the screen — the field is legible
+     either way, so the size is here for the zoom, not for the reading. */
+  font-family: inherit; font-size: 16px;
+  color: var(--ink); background: #101218;
+  border: 1px solid var(--edge); border-radius: 8px; padding: 10px 11px; width: 100%;
+}
+input[readonly] { color: var(--dim); }
+
+.screen { max-width: 720px; margin: 0 auto; }
+#login-form { display: grid; gap: 10px; max-width: 340px; margin-top: 24px; }
+
+/* A page with no squares still looks like a page rather than a stray header.
+   The swipe does not depend on this — it is listened for across the whole
+   screen — but a board that collapses to nothing reads as a fault. */
+#board-screen { min-height: 50vh; }
+
+/* Three across, however many rows that takes — five when the phone is on its
+   side (further down). The page scrolls; the grid does not get its own
+   scrollbar, because a box that scrolls inside a page that also scrolls is
+   miserable on a phone. */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  will-change: transform;
+}
+
+.cell {
+  position: relative;
+  aspect-ratio: 1;
+  /* The state's colour, washed nearly all the way out, across the whole square.
+     Enough to read the board without looking at any one square, faint enough
+     that the pill naming the state is still what you read. --tint is set per
+     square from the state colour and falls back to the panel, so a square with
+     no state mixes the panel with itself and comes out unchanged. Where
+     color-mix is missing the plain declaration stands, which is how this
+     looked before. */
+  --tint: var(--panel);
+  background: var(--panel);
+  background: color-mix(in srgb, var(--tint) 14%, var(--panel));
+  border: 1px solid var(--edge);
+  border-radius: 14px;
+  overflow: hidden;
+  text-align: center;
+  user-select: none;
+}
+
+/* Three invisible zones cover the square: the top third renames it, and the
+   lower two thirds are split down the middle into the two moves. They are
+   buttons rather than one handler reading coordinates, so a keyboard and a
+   screen reader reach them the same way a finger does. */
+.zone {
+  position: absolute;
+  background: none; border: 0; padding: 0; margin: 0;
+  cursor: pointer; z-index: 2;
+}
+.zone.rename { top: 0; left: 0; right: 0; height: 34%; border-radius: 14px 14px 0 0; }
+.zone.left { top: 34%; bottom: 0; left: 0; width: 50%; border-radius: 0 0 0 14px; }
+.zone.right { top: 34%; bottom: 0; right: 0; width: 50%; border-radius: 0 0 14px 0; }
+/* One way out of this state: the square is not split, so the tap area is not
+   either. */
+.zone.whole { top: 34%; bottom: 0; left: 0; right: 0; border-radius: 0 0 14px 14px; }
+.zone:active { background: rgba(255, 255, 255, 0.07); }
+
+/* Faint on purpose: it says where the tap changes meaning without turning the
+   square into a diagram. */
+.cell-divider {
+  position: absolute; left: 10px; right: 10px; top: 34%; height: 1px;
+  background: rgba(255, 255, 255, 0.11); z-index: 1; pointer-events: none;
+}
+.cell-top {
+  position: absolute; top: 0; left: 0; right: 0; height: 34%;
+  display: flex; align-items: center; justify-content: center;
+  padding: 6px 8px; z-index: 1; pointer-events: none;
+}
+.cell-body {
+  position: absolute; top: 34%; left: 0; right: 0; bottom: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 3px; padding: 4px 8px 16px; z-index: 1; pointer-events: none;
+}
+
+.cell-title {
+  font-weight: 700; font-size: 13px; line-height: 1.25;
+  max-height: 2.5em; overflow: hidden;
+}
+.cell-title.empty { color: var(--dim); font-weight: 500; }
+
+.cell-state {
+  font-size: 12px; font-weight: 700; padding: 2px 9px; border-radius: 999px;
+  color: #14161b;
+}
+
+.cell-remaining { font-size: 12px; color: var(--dim); margin-top: 4px; }
+
+/* The countdown ring is drawn behind the text rather than beside it, so the
+   square keeps its size whether or not a timer is running. */
+.ring { position: absolute; inset: 6px; z-index: 0; pointer-events: none; }
+.ring circle { fill: none; stroke-width: 3; }
+.ring .track { stroke: rgba(255, 255, 255, 0.07); }
+.ring .run { stroke: var(--accent); stroke-linecap: round; transition: stroke-dashoffset 1s linear; }
+
+.cell-hints {
+  position: absolute; left: 0; right: 0; bottom: 5px; z-index: 1;
+  display: flex; justify-content: space-between; padding: 0 9px;
+  font-size: 10px; color: var(--dim); pointer-events: none;
+}
+/* One way out: one name, in the middle, with no arrows to pick a side. */
+.cell-hints.one { justify-content: center; }
+
+.panel section {
+  background: var(--panel); border: 1px solid var(--edge);
+  border-radius: 12px; padding: 14px; margin-bottom: 12px;
+}
+/* A link that has a button's job. */
+.button-link {
+  display: inline-block; text-decoration: none; text-align: center;
+  font-weight: 500; color: var(--ink); background: var(--edge);
+  border-radius: 10px; padding: 11px 14px;
+}
+
+.row { display: flex; gap: 8px; flex-wrap: wrap; }
+.row > * { flex: 1 1 auto; }
+
+.editor {
+  display: grid; gap: 8px; padding: 10px 0;
+  border-top: 1px solid var(--edge);
+}
+.editor:first-child { border-top: 0; }
+.editor .fields { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.editor label { font-size: 12px; color: var(--dim); display: grid; gap: 4px; }
+.editor .wide { grid-column: 1 / -1; }
+.editor .actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; align-items: center; }
+.editor .actions .note { margin: 0; flex: 1 1 auto; text-align: left; }
+
+dialog {
+  background: var(--panel); color: var(--ink);
+  border: 1px solid var(--edge); border-radius: 14px; padding: 18px;
+  /* Centred on the screen. Modal dialogs get this from the browser, but saying
+     it here means a dialog opened without showModal — the fallback for older
+     iOS — lands in the same place. */
+  width: min(320px, calc(100vw - 40px));
+  margin: auto; inset: 0; position: fixed;
+}
+dialog::backdrop { background: rgba(0, 0, 0, 0.6); }
+dialog menu { display: flex; gap: 8px; justify-content: center; padding: 0; margin: 14px 0 0; }
+dialog h2, dialog .note { text-align: center; }
+
+/* A phone on its side is wide and short. Three across then leaves one and a
+   half rows visible, with most of the width spent making each square enormous;
+   five fits the shape of the screen. Keyed to a short viewport as well as a
+   wide one, so a desktop window — landscape too, but tall — keeps its three,
+   and to a real width, so a small short window is not squeezed into five. */
+@media (orientation: landscape) and (max-height: 600px) and (min-width: 640px) {
+  .grid { grid-template-columns: repeat(5, 1fr); }
+}
+
+@media (max-width: 420px) {
+  .cell-title { font-size: 13px; }
+  .editor .fields { grid-template-columns: 1fr; }
+}
+
+/* The names the board has actually received, tappable rather than transcribed. */
+.chip {
+  display: inline-block; margin: 3px 4px 0 0; padding: 3px 9px;
+  font-size: 12px; font-weight: 500;
+  background: var(--edge); color: var(--ink);
+  border: 0; border-radius: 999px; cursor: pointer;
+}
+.chip:active { background: var(--accent); color: #14161b; }
+
+/* The page picker: one row per page, big enough to hit with a thumb. */
+.page-choice {
+  display: block; width: 100%; margin-bottom: 6px; text-align: center;
+  background: var(--edge); color: var(--ink); font-weight: 500;
+}
+.page-choice.current { background: var(--accent); color: #14161b; font-weight: 700; }
+
+/* The manual route is folded away: nearly everyone should press the one button
+   above it, and an unfolded list of a URL and a key reads as work to be done. */
+#hook-manual { border-top: 1px solid var(--edge); margin-top: 14px; padding-top: 10px; }
+#hook-manual summary {
+  cursor: pointer; color: var(--dim); font-size: 13px;
+  padding: 4px 0; list-style: revert;
+}
+#hook-manual summary:hover { color: var(--ink); }
+#hook-manual[open] summary { margin-bottom: 8px; }
+.field-label { display: block; color: var(--dim); font-size: 12px; margin: 10px 0 4px; }
+
+/* The masked key is dots until asked for; a monospaced box keeps it from
+   reflowing into a different shape when it is revealed. */
+#hook-key { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.5px; }
+
+/* The message a page with no squares shows instead of nothing at all. Spans
+   the grid so it reads as a statement about the page, not as a first square. */
+.empty-page { grid-column: 1 / -1; text-align: center; padding: 28px 12px; }
+
+/* Above the squares, not instead of them: what is on screen is still the last
+   true state of the board — it has only stopped being renewed. */
+.stale { color: #e0a34a; text-align: center; margin: 0 0 8px; }
+
+#diary {
+  white-space: pre-wrap; word-break: break-all;
+  font-size: 11px; color: var(--dim);
+  max-height: 40vh; overflow: auto; margin: 8px 0;
+}
+
+/* The command part of a square's editor: set off from the name and the
+   estimate above it with a dashed rule, because it changes what a press does
+   rather than what the square says. The disabled form is the whole block
+   greyed, with the reason written above it. */
+.editor .command { border-top: 1px dashed var(--edge); padding-top: 8px; }
+.editor .command.off { opacity: 0.5; }
+.editor .command .why { grid-column: 1 / -1; font-size: 12px; color: #e0a34a; margin: 0; }
+.editor .command .head { grid-column: 1 / -1; font-size: 12px; color: var(--dim); font-weight: 600; margin: 0; }
+
+/* The token, like the key: monospaced so it keeps its shape. */
+#pc-token { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.5px; }
+
+/* 「かんたん接続」: three numbered steps, each with the one thing to press.
+   The status line above them is the whole answer to "is it working" — a tick
+   when the PC has been heard from in the last minute, and words when not. */
+.steps { list-style: none; padding-left: 0; margin: 6px 0 10px; }
+.steps li { margin: 0 0 12px; }
+.steps li > span { display: block; margin-bottom: 6px; }
+.steps .button-link, .steps button { display: inline-block; }
+.pc-status { font-weight: 600; margin: 4px 0 10px; }
+.pc-status.on { color: #6fbf85; }
+.pc-status.off { color: var(--dim); font-weight: 500; }
+/* One line per registered PC: what it is called, whether it is there, when it
+   was last heard from, the switch, and the way off the account. The name takes
+   whatever width is left so the controls stay in the same place down the list. */
+.pc-row {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  padding: 8px 0; border-top: 1px solid var(--edge);
+}
+.pc-row:first-child { border-top: 0; }
+.pc-row .pc-name { flex: 1 1 120px; font-weight: 600; }
+.pc-row .pc-status, .pc-row .note { margin: 0; }
+.pc-on { display: flex; align-items: center; gap: 4px; font-size: 13px; color: var(--dim); }
+.pc-on input { width: auto; margin: 0; }
+
+#pc-fallback { border-top: 1px dashed var(--edge); margin-top: 6px; padding-top: 8px; }
+#pc-code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+#pc-advanced { border-top: 1px solid var(--edge); margin-top: 14px; padding-top: 10px; }
+#pc-advanced summary { cursor: pointer; color: var(--dim); font-size: 13px; padding: 4px 0; list-style: revert; }
+#pc-advanced summary:hover { color: var(--ink); }
+
+/* A sentence under a field that says what to put in it, for someone who does
+   not know what a path or a hotkey is. Spans the editor's two columns. */
+.editor .hint { grid-column: 1 / -1; font-size: 12px; color: var(--dim); margin: -4px 0 4px; line-height: 1.5; }
+.editor .hint code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--edge); padding: 0 4px; border-radius: 4px; }
+
+/* The login screen's foot and the two static pages behind it (terms.html,
+   privacy.html): ordinary links in the page's own colours, and the English
+   half of a page set off from the Japanese above it. */
+.legal { margin-top: 24px; }
+.legal a, .legal-page a, #how-to-video a { color: var(--ink); }
+.legal-page h1 { margin: 24px 0 8px; }
+.legal-page h2 { margin-top: 16px; }
+.legal-page ol, .legal-page ul { padding-left: 22px; }
+.legal-page li { margin-bottom: 6px; }
+.legal-page section[lang="en"] { border-top: 1px solid var(--edge); margin-top: 28px; }
+
+/* The guard's line on a PC's row: a note when it is on, the "stopped" colour
+   when the PC has been cut off. It is never a control. */
+.pc-row .pc-guard { flex: 1 1 100%; }
+
+/* The line under the recovery key that has to be ticked before 「保存しました」
+   can be pressed. Left-aligned, unlike the rest of the dialog: a sentence
+   with a box in front of it reads as a form, not as a notice. */
+.recovery-confirm {
+  display: flex; align-items: flex-start; gap: 8px;
+  margin-top: 12px; font-size: 13px; color: var(--ink); text-align: left;
+}
+.recovery-confirm input { width: auto; margin: 3px 0 0; }
+dialog button:disabled { opacity: 0.45; cursor: default; }

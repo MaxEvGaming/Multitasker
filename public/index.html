@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Multitasker</title>
+<link rel="stylesheet" href="/style.css">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon-180.png">
+<link rel="apple-touch-icon" href="/icon-180.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Multitasker">
+<meta name="theme-color" content="#14161b">
+</head>
+<body>
+
+<!-- Shown only when the app has nothing else to show: the first request has
+     not come back, so no screen has been revealed yet. Without this the page
+     is simply white, which looks exactly like the board having lost the lot. -->
+<div id="offline" class="screen" hidden>
+  <h1 data-i18n="login.head">Multitasker</h1>
+  <p class="note" data-i18n="offline.note">Cannot reach the board. Still trying — this comes back on its own.</p>
+  <p id="offline-detail" class="note"></p>
+  <button type="button" id="offline-retry" data-i18n="offline.retry">Try now</button>
+</div>
+
+<div id="login" class="screen" hidden>
+  <h1 data-i18n="login.head">Multitasker</h1>
+  <p class="note" data-i18n-html="login.intro"></p>
+  <!-- Hidden until public/app.js has an address to put in it (HOW_TO_VIDEO_URL). -->
+  <p id="how-to-video" class="note" hidden><a id="how-to-video-link" href="" target="_blank" rel="noopener" data-i18n="login.howTo">How to use (video)</a></p>
+  <form id="login-form">
+    <input id="email" type="email" autocomplete="username" data-i18n-ph="login.email" required>
+    <input id="password" type="password" autocomplete="current-password" data-i18n-ph="login.password" required>
+    <input id="password-again" type="password" autocomplete="new-password" data-i18n-ph="login.passwordAgain" hidden>
+    <input id="invite" type="text" autocomplete="off" data-i18n-ph="login.invite" hidden>
+    <button type="submit" id="login-submit" data-i18n="login.submit">Sign in</button>
+    <button type="button" id="register-toggle" class="link" data-i18n="login.toRegister">Create the first account</button>
+  </form>
+  <p id="login-error" class="error" role="alert"></p>
+  <button type="button" id="forgot" class="link" data-i18n="login.forgot">Forgotten your password?</button>
+  <p id="forgot-help" class="note" hidden data-i18n="login.forgotHelp"></p>
+  <p class="note legal">
+    <a href="/terms.html" data-i18n="login.terms">Terms of Use</a> ·
+    <a href="/privacy.html" data-i18n="login.privacy">Privacy Policy</a> ·
+    <span data-i18n="login.contact">Contact</span>:
+    <a href="https://discord.gg/ChPdSmnFB2" target="_blank" rel="noopener">Discord</a> /
+    <a href="https://x.com/ratomitsugi" target="_blank" rel="noopener">X</a>
+  </p>
+</div>
+
+<div id="reset-screen" class="screen" hidden>
+  <h1 data-i18n="reset.head">Set a new password</h1>
+  <p class="note" data-i18n="reset.note"></p>
+  <form id="reset-form">
+    <input id="reset-password" type="password" autocomplete="new-password" data-i18n-ph="reset.password" required>
+    <button type="submit" id="reset-submit" data-i18n="reset.submit">Set it</button>
+  </form>
+  <p id="reset-status" class="error" role="alert"></p>
+</div>
+
+<div id="board-screen" class="screen" hidden>
+  <header>
+    <h1 data-i18n="login.head">Multitasker</h1>
+    <div class="header-actions">
+      <button id="open-pages" class="ghost" data-i18n="board.pages">Pages</button>
+      <button id="open-settings" class="ghost" data-i18n="board.settings">Settings</button>
+      <button id="logout" class="icon" data-i18n-label="board.logout" title="Sign out">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4"/>
+          <path d="M10 8l-4 4 4 4"/>
+          <path d="M6 12h9"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+  <p id="stale" class="note stale" hidden></p>
+  <div id="grid" class="grid"></div>
+</div>
+
+<div id="settings" class="screen panel" hidden>
+  <header>
+    <h1 data-i18n="settings.head">Settings</h1>
+    <button id="close-settings" class="ghost" data-i18n="settings.close">Close</button>
+  </header>
+
+  <section id="sec-donate">
+    <h2 data-i18n="settings.donate.head">A request for donations</h2>
+    <p class="note" data-i18n="settings.donate.note"></p>
+    <label class="field-label" data-i18n="settings.donate.address">ETH address (ERC20)</label>
+    <input id="donate-address" readonly value="0x41C472274DBE93936d27678ff2C3eA05b5A4427E">
+    <div class="row">
+      <button id="copy-donate-address" class="ghost" data-i18n="settings.donate.copy">Copy</button>
+    </div>
+    <p id="donate-copy-status" class="note"></p>
+  </section>
+
+  <section id="sec-lang">
+    <h2 data-i18n="settings.lang.head">Language</h2>
+    <p class="note" data-i18n="settings.lang.note">Changes what this site says. It does not change your task names.</p>
+    <select id="lang-choice"></select>
+  </section>
+
+  <section id="sec-push">
+    <h2 data-i18n="settings.push.head">Notifications on your phone</h2>
+    <p class="note" data-i18n="settings.push.note">Add this site to your home screen and open it again from that icon to register.</p>
+    <div class="row">
+      <button id="enable-push" data-i18n="settings.push.enable">Receive notifications on this device</button>
+      <button id="test-push" class="ghost" data-i18n="settings.push.test">Send a test</button>
+    </div>
+    <p id="push-devices" class="note"></p>
+    <p id="push-status" class="note"></p>
+  </section>
+
+  <section id="sec-hook">
+    <h2 data-i18n="settings.hook.head">Where Claude reports in</h2>
+    <p class="note" data-i18n="settings.hook.note">This is how Claude tells the board that it has stopped.</p>
+
+    <p id="hook-locked" class="error" hidden data-i18n="settings.hook.locked"></p>
+    <button id="copy-prompt" data-i18n="settings.hook.copyPrompt">Copy the instructions for Claude</button>
+    <p class="note" data-i18n-html="settings.hook.copyPromptNote">Press it and paste straight into Claude.</p>
+    <p id="copy-status" class="note"></p>
+
+    <details id="hook-manual">
+      <summary data-i18n="settings.hook.manual">If you would rather set it up by hand</summary>
+
+      <p class="note" data-i18n="settings.hook.scriptNote"></p>
+      <a id="download-script" class="button-link" href="/download/notify.js" download="notify.js" data-i18n="settings.hook.script">Download the script</a>
+
+      <label class="field-label" data-i18n="settings.hook.url">Address to send to</label>
+      <input id="hook-url" readonly>
+      <div class="row">
+        <button id="copy-hook" class="ghost" data-i18n="settings.hook.copyUrl">Copy the address</button>
+        <button id="regen-hook" class="ghost" data-i18n="settings.hook.regen">Make a new address</button>
+      </div>
+
+      <div id="hook-key-block" hidden>
+        <label class="field-label" data-i18n="settings.hook.key">Key</label>
+        <input id="hook-key" readonly>
+        <div class="row">
+          <button id="copy-hook-key" class="ghost" data-i18n="settings.hook.copyKey">Copy the key</button>
+          <button id="reveal-hook-key" class="ghost" data-i18n="settings.hook.reveal">Show</button>
+        </div>
+        <p class="note" data-i18n-html="settings.hook.keyNote">Do not show it to anyone.</p>
+      </div>
+    </details>
+  </section>
+
+  <section id="sec-slots">
+    <h2 data-i18n="settings.slots.head">Squares</h2>
+    <p class="note" id="slot-page-label"></p>
+    <p class="note" data-i18n-html="settings.slots.note">Pick from the names below.</p>
+    <p id="seen-names" class="note"></p>
+    <datalist id="seen-list"></datalist>
+    <div id="slot-list"></div>
+    <button id="add-slot" class="ghost" data-i18n="settings.slots.add">Add a square</button>
+  </section>
+
+  <section id="sec-pages">
+    <h2 data-i18n="settings.pages.head">Pages</h2>
+    <p class="note" data-i18n="settings.pages.note">Each page holds its own squares.</p>
+    <div id="page-list"></div>
+    <button id="add-page" class="ghost" data-i18n="settings.pages.add">Add a page</button>
+  </section>
+
+  <section id="sec-states">
+    <h2 data-i18n="settings.states.head">States and where taps lead</h2>
+    <p class="note" data-i18n-html="settings.states.note">The left half and the right half each lead somewhere.</p>
+    <div id="state-list"></div>
+    <button id="add-state" class="ghost" data-i18n="settings.states.add">Add a state</button>
+  </section>
+
+  <section id="sec-pc">
+    <h2 data-i18n="settings.pc.head">PC</h2>
+    <p class="note" data-i18n-html="settings.pc.note">The program on your PC that carries out the commands.</p>
+    <p id="pc-blocked" class="error" hidden></p>
+    <p id="pc-status" class="pc-status"></p>
+    <div id="pc-list"></div>
+    <button id="kill-pcs" class="ghost" data-i18n="settings.pc.kill">Stop every PC (emergency)</button>
+
+    <ol class="steps" id="pc-steps">
+      <li>
+        <span data-i18n="settings.pc.step1">Download the PC program.</span>
+        <a id="download-agent" class="button-link" href="/download/DeckAgentSetup.exe" download="DeckAgentSetup.exe" data-i18n="settings.pc.download">Download</a>
+      </li>
+      <li>
+        <span data-i18n="settings.pc.step2">Run it and let it start.</span>
+      </li>
+      <li>
+        <span data-i18n="settings.pc.step3">Connect this PC.</span>
+        <button id="connect-pc" data-i18n="settings.pc.connect">Connect this PC</button>
+        <p id="pc-connect-status" class="note"></p>
+      </li>
+    </ol>
+
+    <div id="pc-fallback" hidden>
+      <p id="pc-fallback-why" class="note"></p>
+      <label class="field-label" data-i18n="settings.pc.code">Connect code</label>
+      <input id="pc-code" readonly>
+      <div class="row">
+        <button id="copy-pc-code" class="ghost" data-i18n="settings.pc.copyCode">Copy the connect code</button>
+        <button id="make-pc-code" class="ghost" data-i18n="settings.pc.makeCode">Make a connect code</button>
+      </div>
+      <p class="note" data-i18n-html="settings.pc.codeHow">Paste it into the PC program.</p>
+    </div>
+
+    <details id="pc-advanced">
+      <summary data-i18n="settings.pc.advanced">Advanced</summary>
+      <p class="note" data-i18n="settings.pc.advancedNote"></p>
+      <div class="row">
+        <button id="register-pc" class="ghost" data-i18n="settings.pc.register">Make a token by hand</button>
+      </div>
+      <div id="pc-token-block" hidden>
+        <label class="field-label" data-i18n="settings.pc.token">Token</label>
+        <input id="pc-token" readonly>
+        <div class="row">
+          <button id="copy-pc-token" class="ghost" data-i18n="settings.pc.copyToken">Copy the token</button>
+        </div>
+        <p class="note" data-i18n="settings.pc.tokenNote">Shown once, now.</p>
+      </div>
+    </details>
+    <p id="pc-copy-status" class="note"></p>
+  </section>
+
+  <section id="sec-account">
+    <h2 data-i18n="settings.account.head">Account</h2>
+    <div class="editor">
+      <div class="fields">
+        <label><span data-i18n="settings.account.current">Current password</span><input id="pw-current" type="password" autocomplete="current-password"></label>
+        <label><span data-i18n="settings.account.next">New password</span><input id="pw-next" type="password" autocomplete="new-password"></label>
+      </div>
+      <div class="actions"><button id="change-password" data-i18n="settings.account.change">Change password</button></div>
+    </div>
+    <div class="editor">
+      <div class="fields">
+        <label><span data-i18n="settings.account.email">Email address</span><input id="new-email" type="email" autocomplete="email"></label>
+        <label><span data-i18n="settings.account.emailPassword">Password</span><input id="email-password" type="password" autocomplete="current-password"></label>
+      </div>
+      <div class="actions"><button id="change-email" data-i18n="settings.account.changeEmail">Change it</button></div>
+    </div>
+    <p id="account-status" class="note"></p>
+    <p class="note" data-i18n="settings.account.forgot">Ask whoever runs this site to issue a reset link.</p>
+    <div class="editor">
+      <div class="fields">
+        <label class="wide"><span data-i18n="settings.account.deleteLabel">Delete this account</span>
+          <input id="delete-password" type="password" autocomplete="current-password" data-i18n-ph="settings.account.deletePlaceholder"></label>
+      </div>
+      <div class="actions"><button id="delete-account" class="ghost" data-i18n="settings.account.delete">Delete this account</button></div>
+    </div>
+  </section>
+
+  <section id="sec-diary">
+    <h2 data-i18n="settings.diary.head">What this device saw</h2>
+    <p class="note" data-i18n="settings.diary.note"></p>
+    <details>
+      <summary data-i18n="settings.diary.show">Show it</summary>
+      <pre id="diary"></pre>
+      <button id="copy-diary" class="ghost" data-i18n="settings.diary.copy">Copy</button>
+      <p id="build" class="note"></p>
+    </details>
+  </section>
+
+  <section id="sec-data">
+    <h2 data-i18n="settings.data.head">What is kept here</h2>
+    <p class="note" data-i18n-html="settings.data.note"></p>
+    <button id="export" class="ghost" data-i18n="settings.data.export">Download a copy</button>
+    <p id="export-status" class="note"></p>
+  </section>
+
+  <section id="sec-legal">
+    <p class="note legal">
+      <a href="/terms.html" data-i18n="login.terms">Terms of Use</a> ·
+      <a href="/privacy.html" data-i18n="login.privacy">Privacy Policy</a> ·
+      <span data-i18n="login.contact">Contact</span>:
+      <a href="https://discord.gg/ChPdSmnFB2" target="_blank" rel="noopener">Discord</a> /
+      <a href="https://x.com/ratomitsugi" target="_blank" rel="noopener">X</a>
+    </p>
+  </section>
+
+</div>
+
+<dialog id="recovery-dialog">
+  <form>
+    <h2 data-i18n="recovery.head">Your recovery key</h2>
+    <p class="note" data-i18n-html="recovery.note">This is shown once, now.</p>
+    <textarea id="recovery-key" readonly rows="3"></textarea>
+    <menu>
+      <button type="button" id="recovery-copy" class="ghost" data-i18n="recovery.copy">Copy</button>
+      <button type="button" id="recovery-download" class="ghost" data-i18n="recovery.download">Download</button>
+    </menu>
+    <p id="recovery-status" class="note"></p>
+    <label class="recovery-confirm">
+      <input type="checkbox" id="recovery-understood">
+      <span data-i18n="recovery.understood">I understand that without this key, nobody can recover my data if I forget my password.</span>
+    </label>
+    <menu>
+      <button type="button" id="recovery-ok" data-i18n="recovery.ok">I have saved it</button>
+    </menu>
+    <p id="recovery-why" class="note" data-i18n="recovery.why">Copy or download the key first.</p>
+  </form>
+</dialog>
+
+<dialog id="newpass-dialog">
+  <form>
+    <h2 data-i18n="newpass.head">Set a new password</h2>
+    <p class="note" data-i18n="newpass.note"></p>
+    <input id="newpass" type="password" autocomplete="new-password" data-i18n-ph="login.password">
+    <input id="newpass-again" type="password" autocomplete="new-password" data-i18n-ph="login.passwordAgain">
+    <menu>
+      <button type="button" id="newpass-skip" class="ghost" data-i18n="newpass.later">Later</button>
+      <button type="button" id="newpass-ok" data-i18n="newpass.set">Set it</button>
+    </menu>
+    <p id="newpass-status" class="note"></p>
+  </form>
+</dialog>
+<dialog id="recover-dialog">
+  <form>
+    <h2 data-i18n="recover.head">Your recovery key</h2>
+    <p class="note" data-i18n="recover.note"></p>
+    <textarea id="recover-key" rows="3" data-i18n-ph="recover.placeholder"></textarea>
+    <menu>
+      <button type="button" id="recover-cancel" class="ghost" data-i18n="dialog.cancel">Cancel</button>
+      <button type="button" id="recover-ok" data-i18n="recover.ok">Unlock</button>
+    </menu>
+    <p id="recover-status" class="note"></p>
+  </form>
+</dialog>
+
+<dialog id="page-dialog">
+  <form>
+    <h2 data-i18n="dialog.page.head">Pages</h2>
+    <div id="page-choices"></div>
+    <menu>
+      <button type="button" id="page-cancel" class="ghost" data-i18n="dialog.close">Close</button>
+    </menu>
+  </form>
+</dialog>
+
+<dialog id="title-dialog">
+  <form>
+    <h2 data-i18n="dialog.title.head">Task name</h2>
+    <p class="note" id="title-target"></p>
+    <input id="title-input" type="text" data-i18n-ph="dialog.title.placeholder" maxlength="60">
+    <menu>
+      <button type="button" id="title-cancel" class="ghost" data-i18n="dialog.cancel">Cancel</button>
+      <button type="button" id="title-ok" data-i18n="dialog.ok">Done</button>
+    </menu>
+  </form>
+</dialog>
+
+<dialog id="duration-dialog">
+  <form>
+    <h2 data-i18n="dialog.duration.head">Expected time</h2>
+    <p class="note" id="duration-target"></p>
+    <input id="duration-minutes" type="number" min="0" step="1" data-i18n-ph="settings.slots.minutes">
+    <p class="note" data-i18n="dialog.duration.note">Enter 0 for no timer.</p>
+    <menu>
+      <button type="button" id="duration-cancel" class="ghost" data-i18n="dialog.cancel">Cancel</button>
+      <button type="button" id="duration-ok" data-i18n="dialog.duration.start">Start</button>
+    </menu>
+  </form>
+</dialog>
+
+<script src="/app.js" type="module"></script>
+</body>
+</html>

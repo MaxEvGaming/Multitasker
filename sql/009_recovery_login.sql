@@ -1,0 +1,17 @@
+-- A way back in for someone who has lost their password but kept the recovery
+-- key they were told to save.
+--
+-- Until now that key could open the board but not get through the front door:
+-- signing in wants a proof derived from the password, and someone who has
+-- forgotten it cannot make one. The only route was to ask whoever runs the site
+-- for a reset link, which is no use to a person whose board is on their phone at
+-- two in the morning.
+--
+-- So the recovery key gets a proof of its own, derived down a separate branch —
+-- what is stored here opens nothing, exactly like the password's.
+--
+-- Null for accounts made before this: they have a recovery key that can still
+-- read the board, but the server was never told a proof for it, so it cannot let
+-- them in on the strength of it. Those accounts have to be made again to gain
+-- the way back.
+alter table users add column if not exists recovery_hash text;

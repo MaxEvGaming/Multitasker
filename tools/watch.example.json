@@ -1,0 +1,4 @@
+{
+  "url": "https://YOUR-BOARD.example.com/api/health",
+  "slack": "https://hooks.slack.com/services/PUT/YOURS/HERE"
+}

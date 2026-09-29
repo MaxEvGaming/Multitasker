@@ -1,0 +1,6 @@
+{
+  "url": "https://YOUR-BOARD.example.com/api/backup",
+  "token": "the BACKUP_TOKEN from the server .env",
+  "into": "%USERPROFILE%/Backups/taskboard",
+  "keep": 30
+}

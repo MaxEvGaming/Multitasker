@@ -1,0 +1,17 @@
+node_modules/
+
+# Anything holding a secret. The example files beside them show the shape.
+.env
+tools/watch.json
+tools/backup.json
+test/*.pem
+
+# The PC-side agent (agent/): build output and the published exe.
+agent/bin/
+agent/obj/
+agent/publish/
+
+# The installer the board hands out (public/download/). 33 MB, built on
+# Windows by agent/build.ps1 and copied here at deploy time — see
+# deploy/PRODUCTION.md. version.json beside it is small and stays in git.
+public/download/DeckAgentSetup.exe
