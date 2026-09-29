@@ -22,7 +22,7 @@ const EN = {
   'app.title': 'Multitasker',
 
   'login.head': 'Multitasker',
-  'login.intro': '<strong>Multitasker</strong> — a board that rings your phone when Claude Code stops. Put a command on a square and it doubles as a Stream Deck that drives your PC from your phone. Works as a plain task board or a Pomodoro timer too.',
+  'login.intro': '<strong>Multitasker</strong> — a board that rings your phone when Claude Code stops. Put a command on a square and it doubles as a button that drives your PC from your phone. Works as a plain task board or a Pomodoro timer too.',
   'login.howTo': 'How to use (video)',
   'login.terms': 'Terms of Use',
   'login.privacy': 'Privacy Policy',
@@ -349,7 +349,7 @@ const JA = {
   'app.title': 'Multitasker',
 
   'login.head': 'Multitasker',
-  'login.intro': '<strong>Multitasker</strong> — Claude Code が止まったらスマホが鳴る盤。枠にコマンドを入れれば、スマホから PC を動かす Stream Deck にもなります。ふつうのタスクボードやポモドーロタイマーとしても使えます。',
+  'login.intro': '<strong>Multitasker</strong> — Claude Code が止まったらスマホが鳴る盤。枠にコマンドを入れれば、スマホから PC を動かすボタンにもなります。ふつうのタスクボードやポモドーロタイマーとしても使えます。',
   'login.howTo': '使い方（動画）',
   'login.terms': '利用規約',
   'login.privacy': 'プライバシーポリシー',

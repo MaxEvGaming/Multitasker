@@ -1,226 +1,228 @@
 # Multitasker
 
-並行して走っている Claude のセッションを、9つの正方形で一目で見るための小さなサイトです。
-Claude からの知らせを Slack と同じ形のWebhookで受け取り、必要なときだけ iPhone に通知します。
+日本語版: [README.ja.md](README.ja.md)
 
-設置手順は [deploy/PRODUCTION.md](deploy/PRODUCTION.md) にあります。
+A small site for seeing, at a glance, the Claude sessions you have running side by side — as nine squares.
+It takes word from Claude through a webhook of the same shape as Slack's, and notifies your phone only when it needs to.
 
-## 何をするもの
+How to set it up on a server is in [deploy/PRODUCTION.md](deploy/PRODUCTION.md) (in Japanese).
 
-- **9つの枠**。1枠が1つの案件です
-- 各枠に **タイトル・状態・（時間を計る状態なら）残り時間の輪**
-- **ボタンの左半分と右半分で行き先が違います。** どちらが何になるかは枠の下に薄く出ます
-- **状態も、状態から出る矢印も、利用者が作ります。** 「待機中・対応中・進行中・停止中」は最初に入っている例で、
-  増やすことも、巡回の順を変えることもできます
-- **Claude が「セッションが止まった」と知らせてきたら**、その名前を持つ枠が自分で動きます
-- **予想所要時間を過ぎたときも**、自分で動きます
-- **自分で動いたときだけ iPhone に通知します。** 自分で押したときは鳴りません（押した本人は知っているので）
+## What it does
 
-## 状態が持つもの
+- **Nine squares.** One square is one piece of work
+- Each square shows **a title, a state, and (if the state runs a timer) a ring of the time left**
+- **The left half and the right half of a square lead to different places.** Which leads where is shown faintly under the square
+- **You make the states, and the arrows that leave them.** "Waiting, On it, Running, Stopped" are the examples a new board starts with;
+  you can add more, and change the order they go round in
+- **When Claude reports that a session has stopped**, the square carrying that name moves by itself
+- **When you give Claude an instruction**, the square carrying that name moves by itself too
+- **When the expected time runs out**, it moves by itself as well
+- **Your phone is notified only when a square moved by itself.** It stays quiet when you pressed the square (you already know)
 
-| | 意味 |
+## What a state holds
+
+| | Meaning |
 |---|---|
-| ◀ 左タップの行き先 | ボタンの左半分を押したときに移る先。空にすると左半分は無反応になります |
-| 右タップの行き先 ▶ | 同じく右半分 |
-| 自動で移る先 | Claude からの知らせと、時間切れの両方で使われる先 |
-| タイマーを回す | この状態にいる間、輪が減っていきます |
+| ◀ Where a left tap leads | Where the square goes when its left half is pressed. Leave it empty and the left half does nothing |
+| Where a right tap leads ▶ | The same, for the right half |
+| Where it goes when Claude stops | Used both for Claude's report that it has stopped and for the timer running out |
+| Where it goes on an instruction | Used for the report that you have given Claude an instruction |
+| Run a timer | While the square is in this state, the ring runs down |
 
-## PC に指示を出す
+## Sending instructions to a PC
 
-枠に**コマンド**を入れると、その枠は Stream Deck のボタンになります。
-押すと（左右どちらでも）矢印に沿って動く代わりに、指示を PC に送ります。
+Put a **command** on a square and the square becomes a button that drives your PC.
+Pressing it (either half) sends an instruction to the PC instead of following the arrows.
 
-- **できること（v1）**: アプリ・ファイルを開く／URL を開く／
-  ホットキー（`ctrl+shift+f13` の書き方）／OBS（シーン切替・録画・配信・音源のミュート切替）。
-  コマンド実行（`cmd /c` に 1 行渡す）は **2026-09-14 に止めた。理由: 任意の1行を歯止め無しで実行するため**
-- **枠の動き**: 押す → **PC が実行している間**の状態（既定: 処理中）→ 成功なら**成功したら**の状態（既定: 待機中）、
-  失敗なら**失敗したら**の状態（既定: 停止中）。3つの移り先は枠ごとに、自分の状態から選べます
-- **5 秒ルール**: 押してから **5 秒以内に PC が取りに来なければ、その指示は捨てられ、枠は失敗の状態**に移ります。
-  変えられません。PC が「受け取った」と言ってから **60 秒以内に結果が来なければ失敗**扱いです
-- **見えるのは色だけ**: 成功か失敗か。コマンドの出力は届きません
-- **鳴るのは、PC から返事が来た時（成功・失敗・誰も取りに来なかった）だけ**。押した時は鳴りません。
-  ほかの枠と同じ「自分で動いた時だけ通知」のルールです
-- **暗号化が必須**: コマンドは枠の名前と同じ鍵でブラウザが封じ、サーバーは読めません。
-  サーバーが読める指示は、サーバーを乗っ取った人が書ける指示でもあるからです。
-  暗号化されていないボードでは、設定画面に「先に暗号化を有効にしてください」と出て、コマンドは入れられません
+- **What it can do**: open an app or a file / open a URL /
+  press a hotkey (written `ctrl+shift+f13`) / type text (press the key that opens chat → type the line → Enter; for game commands) /
+  OBS (switch scene, recording, streaming, mute or unmute an audio source, show or hide a source).
+  Running a command (one line handed to `cmd /c`) **was switched off on 2026-09-14, because it ran any one line with nothing to hold it back**
+- **How the square moves**: press → the **While the PC is working** state (default: Running) → on success, the **When it succeeds** state (default: Waiting);
+  on failure, the **When it fails** state (default: Stopped). All three can be chosen per square, from your own states
+- **The 5-second rule**: if **no PC comes for the instruction within 5 seconds of the press, it is thrown away and the square goes to the failure state**.
+  This cannot be changed. Once a PC has said "received", **no result within 60 seconds counts as a failure**
+- **Only the colour comes back**: success or failure. The command's output is never sent
+- **It rings only when the PC has answered (success, failure, or nobody came)**. It does not ring on the press.
+  This is the same rule as every other square: notify only when the square moved by itself
+- **Encryption is required**: the browser seals the command with the same key as the square's name, and the server cannot read it.
+  An instruction the server can read is an instruction that whoever takes over the server can write.
+  On a board that is not encrypted, the settings screen says "Turn on encryption first" and no command can be entered
 
-**PC をつなぐ:** 設定 → **PC** の 3 手（下の「PC 側（インストール）」）。アカウント1つに PC は何台でも登録でき、
-設定画面の一覧で**1台ずつ ON / OFF**（OFF は接続を切らず、盤が指示を送らないだけ）と登録解除ができます。
-枠は**どの PC で走らせるか**を選べ、既定は「ON になっている全台」です。
-PC 側が実装する約束事は [docs/DECK_AGENT_PROTOCOL.md](docs/DECK_AGENT_PROTOCOL.md) にあります。
+**Connecting a PC:** three steps under Settings → **PC** (see "The PC side" below). One account can register any number of PCs;
+the list in the settings screen **switches each one ON or OFF** (OFF does not drop the connection — the board just stops sending to it) and removes it.
+A square can choose **Which PC it runs on**; the default is "Every PC that is switched on".
+What the PC side has to implement is in [docs/DECK_AGENT_PROTOCOL.md](docs/DECK_AGENT_PROTOCOL.md) (in Japanese).
 
-## PC 側（インストール）
+## The PC side (installing)
 
-指示を受けて実行するのは、PC に常駐する小さなトレイアプリ **Multitasker PC Agent**（`agent/`・Windows のみ）です。
-詳しくは [agent/README.md](agent/README.md)。**設定は盤の案内に従って押すだけで済みます。**
+Instructions are received and carried out by a small tray program that stays running on the PC, **Multitasker PC Agent** (`agent/`, Windows only).
+Details are in [agent/README.md](agent/README.md) (in Japanese). **Setting it up is a matter of pressing what the board tells you to press.**
 
-1. 盤の **設定 → PC** の **① ダウンロード** で `DeckAgentSetup.exe` を落とす
-2. 実行して「次へ」で最後まで（管理者権限は不要。ログオン時に起動する登録と、`multitasker://` リンクの受け口の登録も一緒に入ります）。
-   終わるとプログラムが起動し、時計の横に丸いアイコンが出ます
-3. **同じ PC のブラウザ**で盤の **設定 → PC → ③ この PC をつなぐ** を押す。ブラウザが `multitasker://pair#…` のリンクを開き、
-   アプリが盤のアドレス・トークン・鍵を受け取って接続します。盤の PC 欄が **接続済み ✓** になれば、枠を押すとその PC で動きます
+1. In the board's **Settings → PC**, press **① Download** to get `DeckAgentSetup.exe`
+2. Run it and press Next to the end (no administrator rights needed; it also registers the program to start at logon and to receive `multitasker://` links).
+   When it finishes the program starts, and a round icon appears next to the clock
+3. In **a browser on the same PC**, press **Settings → PC → ③ Connect this PC**. The browser opens a `multitasker://pair#…` link,
+   the program receives the board's address, token and key, and connects. Once the PC section says **Connected ✓**, pressing a square runs it on that PC
 
-**スマホから設定している／アプリがリンクを受け取れなかった場合**は、盤に**接続コード**（同じ文字列）が出ます。
-コピーして、PC のアプリの設定画面（トレイのアイコンをダブルクリック）の **接続コード** 欄に貼り、**貼り付けて接続** を押してください。
-従来の 3 欄（盤のアドレス・トークン・鍵）は設定画面の **詳細** の中にあり、手で入れることもできます。
+**If you are setting up from a phone, or the program did not receive the link**, the board shows a **Connect code** (the same string).
+Copy it, paste it into the **Connect code** field of the program's settings window (double-click the tray icon), and press **Paste and connect**.
+The original three fields (board address, token, key) are under **Advanced** in that window and can be filled in by hand.
 
-OBS を使うなら、OBS 側で **ツール → WebSocket サーバー設定** を開いて WebSocket サーバーを有効にし、
-ポートとパスワードをアプリの設定 → 詳細 の OBS 欄に入れます。
+To use OBS, open **Tools → WebSocket Server Settings** in OBS and enable the WebSocket server.
+The program reads the port and the password from that PC's own OBS settings; there is nothing to type
+(the OBS fields under Settings → Advanced are only for using values other than the ones OBS has).
 
-**更新:** アプリは起動時と 24 時間ごとに `<盤>/download/agent/version.json` を見て、新しい版があればトレイのメニューに
-**更新あり（x.y.z）** を出します。選ぶとダウンロード先が開きます。勝手に落として入れ替えることはしません。
+**Updates:** at start-up and every 24 hours the program looks at `<board>/download/agent/version.json`, and if there is a newer version
+the tray menu shows **Update available (x.y.z)**. Choosing it opens the download. It never downloads and replaces itself on its own.
 
-設定は `%APPDATA%\Multitasker\agent.json`、記録は同じ場所の `agent.log`（成否だけ。コマンドの出力は書きません）。
-アンインストールしても `agent.json` は残ります。
+Settings are in `%APPDATA%\Multitasker\agent.json`, and the log is `agent.log` in the same place (success or failure only; command output is not written).
+Uninstalling leaves `agent.json` behind.
 
-**盤側に置くもの:** `public/download/DeckAgentSetup.exe`（`.gitignore` 済み・33 MB）と `public/download/agent/version.json`。
-どちらも `agent/build.ps1` が置きます（.NET 10 SDK と Inno Setup 6.3+ が要る）。本番へ出す手順は
-[deploy/PRODUCTION.md](deploy/PRODUCTION.md) の「7.6」。
+**What the board has to carry:** `public/download/DeckAgentSetup.exe` (in `.gitignore`, 33 MB) and `public/download/agent/version.json`.
+`agent/build.ps1` puts both there (it needs the .NET 10 SDK and Inno Setup 6.3+). Getting them to production is
+section 7.6 of [deploy/PRODUCTION.md](deploy/PRODUCTION.md).
 
-検査: `node test/deck-seal-agent.js`（暗号の一致・exe が要る）と
-`DATABASE_URL=... node test/deck-agent.js`（本物の exe を起動して押す→成功／失敗／5 秒切れ、`multitasker://pair#…` 引数での起動→
-`agent.json` が書かれ接続すること、起動中の実例への受け渡し、接続コードの解析、URL の規則）。
+Checks: `node test/deck-seal-agent.js` (agreement of the encryption; needs the exe) and
+`DATABASE_URL=... node test/deck-agent.js` (starts the real exe and presses squares → success / failure / the 5-second expiry; starting with a `multitasker://pair#…` argument →
+`agent.json` is written and it connects; handing over to an instance already running; parsing the connect code; the URL rules).
 
-## 動かし方（手元で）
+## Running it locally
 
 ```bash
 docker run -d --name tb-dev -e POSTGRES_PASSWORD=dev -e POSTGRES_DB=taskboard -p 55432:5432 postgres:17-alpine
 npm install
-npm run vapid            # 出た2行を下の環境変数に入れる
+npm run vapid            # put the two lines it prints into the variables below
 DATABASE_URL=postgres://postgres:dev@127.0.0.1:55432/taskboard \
 VAPID_SUBJECT=mailto:you@example.com \
 VAPID_PUBLIC_KEY=... VAPID_PRIVATE_KEY=... \
 npm start
 ```
 
-`http://127.0.0.1:3040` を開き、**「登録する」**でアカウントを作ります。
-`REGISTRATION_OPEN=true` なら誰でも登録できます。書かなければ、利用者がいない間だけ登録が開いていて、1人目ができた時点で閉じます。
+Open `http://127.0.0.1:3040` and make an account with **Create account**.
+With `REGISTRATION_OPEN=true` anyone can register. Without it, registration is open only while there are no users, and closes once the first one exists.
 
-## 試験
+## Tests
 
-サーバーを起動したまま、別の窓で:
+With the server running, in another window:
 
 ```bash
-DATABASE_URL=... node test/e2e.js        # ボードの一通り
-DATABASE_URL=... node test/security.js   # 試行制限・パスワード変更/再設定・削除・Webhookの上限
-DATABASE_URL=... node test/push-rule.js  # 通知が鳴る条件
-DATABASE_URL=... node test/password-never-sent.js  # パスワードが外に出ていないこと
-DATABASE_URL=... node test/deck.js       # PC への指示（押す→取りに来る→返事→枠が動く、5 秒で捨てる、上限）＋接続コードの組み立て・URL の補完
-node test/deck-seal.js                   # 指示の暗号文の既知ベクトル（C# 側と突き合わせる）
+DATABASE_URL=... node test/e2e.js        # the board, end to end
+DATABASE_URL=... node test/security.js   # attempt limits, changing and resetting passwords, deletion, the webhook's limit
+DATABASE_URL=... node test/push-rule.js  # when a notification rings
+DATABASE_URL=... node test/password-never-sent.js  # the password never leaves the browser
+DATABASE_URL=... node test/deck.js       # instructions to a PC (press → collected → answered → the square moves; thrown away at 5 seconds; limits), building the connect code, completing URLs
+node test/deck-seal.js                   # known-answer vector for a sealed instruction (checked against the C# side)
 ```
 
-`deck.js` は PC 側の役を自分で演じます（本物と同じ SSE の流れと3つの URL）。
-**5 秒待つ検査が2つと 620 回叩く検査が1つ**あるので、30 秒ほどかかります。
-`push-rule.js` にも「押した時は鳴らず、返事が来た時だけ鳴る」の検査が入っています。
+`deck.js` plays the PC's part itself (the same SSE stream and the same three URLs as the real one).
+It has **two checks that wait 5 seconds and one that makes 620 requests**, so it takes about 30 seconds.
+`push-rule.js` also checks "silent on the press, rings only when the answer comes".
 
-`push-rule.js` は偽の通知先に自己署名の証明書を使うので、
-**サーバー側を `NODE_TLS_REJECT_UNAUTHORIZED=0` で起動**し、
-`test/` で証明書を作っておく必要があります（試験専用。本番は Apple の本物の証明書です）:
+`push-rule.js` uses a self-signed certificate for its fake push service, so
+**the server has to be started with `NODE_TLS_REJECT_UNAUTHORIZED=0`**, and
+the certificate has to be made in `test/` first (tests only; the push services used in production have real certificates):
 
 ```bash
 cd test && openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem   -days 2 -nodes -subj "/CN=127.0.0.1" -addext "subjectAltName=IP:127.0.0.1"
 ```
 
-`e2e.js` は本物の Postgres を相手に、登録から巡回・Webhook・時間切れまでを歩きます。
-`security.js` は、間違ったパスワードを繰り返して締め出されること、消したアカウントの行が
-本当に消えること、Webhookが撃たれ続けたら断ることを、実際に叩いて確かめます。
-`push-rule.js` は**偽の通知先を立てて実際に届いた数を数え**、
-「自分で押したときは鳴らない・自動で動いたときだけ鳴る」を確かめます
-（`test/*.pem` の自己署名証明書が要ります。作り方は同ファイルの先頭に）。
+`e2e.js` walks a real Postgres from registration through the rounds, the webhook and the timer running out.
+`security.js` actually makes the requests: repeated wrong passwords get locked out, the rows of a deleted account
+are really gone, and a webhook that keeps being hit is refused.
+`push-rule.js` **stands up a fake push service and counts what actually arrives**, and checks
+"silent when you pressed it, rings only when it moved by itself"
+(it needs the self-signed certificate in `test/*.pem`; how to make it is at the top of that file).
 
-## 環境変数
+## Environment variables
 
 | | |
 |---|---|
-| `DATABASE_URL` | Postgres への接続先。**専用のデータベースを使ってください** |
-| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | 通知の鍵。`npm run vapid` で作ります |
-| `VAPID_SUBJECT` | `mailto:` か `https://` で始まる連絡先。Apple はこの形式でないと受け取りません |
-| `PORT` | 既定 3040 |
-| `REGISTRATION_OPEN` | `true` にすると誰でも登録できます（ベータ中はこれ）。書かなければ「1人目だけ」 |
-| `SITE_URL` | 招待リンク・再設定リンクを組み立てるときの宛先 |
-| `BACKUP_TOKEN` | バックアップ取得用の秘密の文字列。24文字以上。**設定しなければその URL は存在しません** |
-| `BACKUP_DIR` | バックアップの置き場（コンテナ内）。既定 `/backups` |
-| `NODE_ENV` | `production` のとき、ログインの記録を HTTPS 限定にします |
+| `DATABASE_URL` | Where Postgres is. **Use a database of its own** |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | The notification keys. `npm run vapid` makes them |
+| `VAPID_SUBJECT` | A contact beginning with `mailto:` or `https://`. Apple does not accept anything else |
+| `PORT` | Default 3040 |
+| `REGISTRATION_OPEN` | `true` lets anyone register. Without it, only the first person can |
+| `SITE_URL` | The address used when building invitation links and reset links |
+| `BACKUP_TOKEN` | A secret string for fetching backups. 24 characters or more. **If it is not set, that URL does not exist** |
+| `BACKUP_DIR` | Where backups are kept (inside the container). Default `/backups` |
+| `NODE_ENV` | When `production`, the login cookie is HTTPS-only |
 
-## 作りの理由
+## Why it is built this way
 
-- **ビルド工程がありません。** 素の Node と素のブラウザで動きます。壊れる箇所を減らすためです
-- **パスワードはブラウザから出ません。** ログインに送るのは、パスワードと
-  そのアカウントのソルト（アカウントごとの乱数）から導いた**トークン**
-  （パスワードそのものではない、送信専用の値）です。サーバーはそれを scrypt で保管しますが、
-  トークンでは暗号化された鍵は開きません（導出を二手に分け、鍵を開ける側は
-  ブラウザに残しています）。＝**保管されているものを読まれても、
-  通信を覗かれても、中身は開きません。**
-  守れないのは「このサイト自身が別のコードを配ること」で、
-  ブラウザで暗号化する仕組みは全部そうです
-- **scrypt は Node に同梱**なので、ネイティブの拡張を持ち込まずに済みます。
-  Node を上げても壊れません
-- **通知は Apple へ直接送ります。** 他社の中継を通しません
-- **Webhookは Slack と同じ形**（`{"text": "*名前* — 本文"}`）。
-  PC 側の通知フックは送り先を変えるだけで、書き換えは要りません
+- **There is no build step.** It runs on plain Node and a plain browser, so that there are fewer places for it to break
+- **The password never leaves the browser.** What is sent to log in is a **token** derived from the password and
+  the account's salt (a random value per account) — a value for sending only, not the password itself.
+  The server stores it with scrypt, but the token does not open the encrypted key
+  (the derivation is split in two, and the half that opens the key stays in the browser).
+  So **reading what is stored, or listening to the connection, does not open the contents.**
+  What this cannot protect against is the site itself serving different code,
+  which is true of everything that encrypts in the browser
+- **scrypt ships with Node**, so no native extension has to be brought in.
+  Upgrading Node does not break it
+- **Notifications go straight to the push service of the phone's browser (Apple's, for an iPhone).** No third-party relay
+- **The webhook has the same shape as Slack's** (`{"text": "*name* — body"}`).
+  A notification hook on the PC side only has to change where it sends; nothing needs rewriting
 
-## パスワードを忘れた人が出たら
+## When someone forgets their password
 
-メールは送っていないので、**管理者が再設定リンクを作って渡します**:
+No email is sent, so **the administrator makes a reset link and hands it over**:
 
 ```bash
 docker exec taskboard node src/reset.js someone@example.com
 ```
 
-24時間有効・1回だけ使えるリンクが出ます。使われた時点で、その人の開いているセッションは
-すべて閉じます（乗っ取られていた場合に備えて）。
+It prints a link that is valid for 24 hours and works once. The moment it is used, every session that person has open
+is closed (in case the account had been taken over).
 
-## テストの走らせ方（ローカル）
+## Running the tests (local)
 
-15 本あります。**8 本はサーバーと DB を要求し、3 本はさらに自己署名証明書と通知鍵を要求します。**
-足りないと「異常終了」や「通知が 0 件」に見えますが、それは環境の不足であって不具合ではありません。
+There are 27. **19 need the server and a database, and 3 of those (`push-rule` `start-signal` `tenancy`) also need the self-signed certificate and the notification keys.**
+`deck-seal-agent` and `deck-agent` also need the PC Agent's exe.
+When something is missing it looks like "exited abnormally" or "0 notifications", but that is the environment falling short, not a fault.
 
 ```bash
-# 1. 使い捨ての DB
+# 1. A throwaway database
 docker exec postgres psql -U postgres -c "create database taskboard_test;"
 
-# 2. 偽の通知先が使う証明書（test/*.pem は .gitignore 済み）
+# 2. The certificate the fake push service uses (test/*.pem is in .gitignore)
 cd test && MSYS_NO_PATHCONV=1 openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem \
   -days 365 -nodes -subj "/CN=localhost" -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
 
-# 3. 通知鍵
+# 3. The notification keys
 npm run vapid
 
-# 4. サーバー（NODE_TLS_REJECT_UNAUTHORIZED=0 は"サーバー側にも"要る。
-#    偽の通知先が自己署名なので、送る側が拒否する）
-DATABASE_URL=postgres://<ユーザー>:<パスワード>@127.0.0.1:5432/taskboard_test \
+# 4. The server (NODE_TLS_REJECT_UNAUTHORIZED=0 is needed on the server side as well:
+#    the fake push service is self-signed, so the sender would refuse it)
+DATABASE_URL=postgres://<user>:<password>@127.0.0.1:5432/taskboard_test \
 PORT=3040 REGISTRATION_OPEN=true NODE_TLS_REJECT_UNAUTHORIZED=0 \
-VAPID_SUBJECT=mailto:test@example.com VAPID_PUBLIC_KEY=<公開鍵> VAPID_PRIVATE_KEY=<秘密鍵> \
+VAPID_SUBJECT=mailto:test@example.com VAPID_PUBLIC_KEY=<public key> VAPID_PRIVATE_KEY=<private key> \
 node src/server.js &
 
-# 5. テスト（REGISTRATION_OPEN はテスト側にも要る＝e2e が「扉」の期待を切り替える）
+# 5. The tests (REGISTRATION_OPEN is needed on the test side too: e2e switches what it expects of the "door")
 DATABASE_URL=... BASE=http://127.0.0.1:3040 REGISTRATION_OPEN=true NODE_TLS_REJECT_UNAUTHORIZED=0 \
   node test/e2e.js
 ```
 
-**DB 不要なのは 5 本**（`crypto` `crypto-agreement` `deck-seal` `i18n` `settings-order`）。
-このうち `i18n` は、画面の文言が両言語で揃っているか・地の文に日本語が残っていないかを見ます。
+**7 need no database** (`crypto` `crypto-agreement` `deck-seal` `download` `editors` `i18n` `settings-order`).
+Of these, `i18n` checks that the wording on screen exists in both languages and that no Japanese is left in the markup.
 
-## ライセンス
+## Licence
 
-ソースコードは **MIT License** で公開しています。全文は [LICENSE](LICENSE) にあります。
+The source code is released under the **MIT License**. The full text is in [LICENSE](LICENSE).
 
-- **してよいこと**: 使う・中身を読む・改造する・配り直す・商用で使う。自分のサーバーに設置して運用してかまいません
-- **条件は 1 つ**: コピーや改造版を配るときは、`LICENSE` の著作権表示と許諾文をそのまま付けてください
-- **無保証**: このソフトウェアを使って起きた損害について、作者は責任を負いません
+- **What you may do**: use it, read it, modify it, redistribute it, use it commercially. You may set it up and run it on your own server
+- **The one condition**: when you hand on a copy or a modified version, keep the copyright notice and the permission notice from `LICENSE` with it
+- **No warranty**: the author is not liable for damage arising from the use of this software
 
-**English:** The source code is released under the MIT License ([LICENSE](LICENSE)).
-You may use, modify, redistribute and self-host it, including commercially, as long as the
-copyright notice and the permission notice stay with every copy. It comes with no warranty.
+### Other people's software this uses
 
-### 利用している他者のソフトウェア
-
-| もの | どこで使うか | ライセンス |
+| What | Where it is used | Licence |
 |---|---|---|
-| [pg](https://github.com/brianc/node-postgres) | サーバー（DB 接続） | MIT |
-| [web-push](https://github.com/web-push-libs/web-push) | サーバー（通知の送信） | MPL-2.0 |
-| [.NET ランタイム](https://github.com/dotnet/runtime) | PC Agent の exe に同梱 | MIT |
-| [Inno Setup](https://jrsoftware.org/isinfo.php) | PC Agent のインストーラを作る道具 | Inno Setup License |
+| [pg](https://github.com/brianc/node-postgres) | Server (database connection) | MIT |
+| [web-push](https://github.com/web-push-libs/web-push) | Server (sending notifications) | MPL-2.0 |
+| [.NET runtime](https://github.com/dotnet/runtime) | Bundled in the PC Agent's exe | MIT |
+| [Inno Setup](https://jrsoftware.org/isinfo.php) | The tool that builds the PC Agent's installer | Inno Setup License |
 
-どれもこのリポジトリには入っていません（`npm install` と `agent/build.ps1` が取得します）。
-画面側（`public/`）は外部のライブラリを使っていません。
+None of these is in this repository (`npm install` and `agent/build.ps1` fetch them).
+The screen side (`public/`) uses no outside libraries.
