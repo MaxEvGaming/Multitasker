@@ -170,7 +170,7 @@ data: {"id":"42","createdAt":"2026-09-09 10:25:33.123456+00","sealed":"v1.<iv>.<
    - `id` が `data.id` と違う
    - `id` を既に処理した（**既知の番号を覚えておく**。少なくとも直近 1 時間ぶん）
    - `at` が今より **5 分以上古い**（時計ずれの余裕。盤は 5 秒で捨てるので普通は来ない）
-   - `kind` が `open|url|hotkey|text|obs` のどれでもない（**`exec` もここに入る**＝2026-09-14 に止めた。下の表の注）
+   - `kind` が `open|url|hotkey|text|obs|marker` のどれでもない（**`exec` もここに入る**＝2026-09-14 に止めた。下の表の注）
 4. **すぐ `ack`** を送る（作成から **5 秒**以内に届かなければ盤が `expired` にして枠を失敗の状態に動かす。PC が実行を始めてから ack するのでは遅い）。
 5. 実行する。**60 秒**で打ち切り＝失敗（agent 設定で変更可、ただし盤は ack から 60 秒で `failed` にするので、それより長くしても盤は待たない）。
 6. `result` に `{"ok": true|false}` を送る。**出力・エラー文は送らない**。
@@ -191,6 +191,7 @@ data: {"id":"42","createdAt":"2026-09-09 10:25:33.123456+00","sealed":"v1.<iv>.<
 | `obs` | `{"op": "stream", "arg": "start|stop|toggle"}` | 配信 |
 | `obs` | `{"op": "mute", "arg": "<音源名>"}` | その音源のミュートを切り替える |
 | `obs` | `{"op": "visible", "scene": "<シーン名>", "source": "<ソース名>", "arg": "show|hide|toggle"}` | そのソースの表示／非表示（2026-09-13 追加） |
+| `marker` | `{"label": "<ラベル>", "lang": "ja|en"}`（`label` は無ければ `""`。盤で 40 文字まで。`lang` は押した時の盤の言語） | 配信マーカー（2026-10-05 追加）。OBS に配信と録画の経過時間を訊き、押した瞬間の値を PC のファイルに 1 行足す。下の `marker` |
 
 OBS の接続先（host/port/password）は **PC 側の設定**。指示には入らない。
 
@@ -243,6 +244,53 @@ OBS の接続先（host/port/password）は **PC 側の設定**。指示には�
 | 1回の `SendInput` にまとめる（直す前） | `/gamemode creative` | 15ms | 崩れる（`/gamemode eeeeeeee`） |
 | 1文字ごとに 25ms（いまの `Hotkeys.Type`） | `/gamemode creative` | 527ms | **完全一致** |
 
+#### `marker`（配信マーカー・2026-10-05 追加）
+
+配信中に切り抜きたい場面で無言で押す枠。**押した瞬間が配信・録画の開始から何分何秒か**を、この PC のファイルに記録する。
+盤へは成功／失敗だけが返り、時刻は盤に送らない（T-495 A・T-496 A・T-498 A・T-499 A）。
+
+1. OBS に `GetStreamStatus` と `GetRecordStatus` を訊く（obs-websocket 5.x。どちらも `outputActive`（bool）と
+   `outputDuration`（**ミリ秒**）を返す。v5.0.0 から。`protocol.md` で確認済み）。接続は他の OBS の指示と同じ（`Obs.WithLinkAsync`）
+2. **両方 `outputActive=false` なら失敗**。OBS につながらない・どちらかの要求が断られた・答えが読めないときも失敗
+3. 動いている方の `outputDuration` から **（答えが届いた時刻 − 指示の `at`）** を引き、押した瞬間の経過時間にする。負なら 0。
+   `at` は押した端末の時計、引く側はこの PC の時計なので、二つの時計のずれはそのまま数字に入る
+4. `%APPDATA%\Multitasker\markers\<yyyy-MM-dd>.txt` に 1 行追記（UTF-8・BOM なし・1 押し 1 行・タブ区切り）。書けたら成功
+
+```
+2026-10-05 21:14:03<TAB>配信 01:23:45<TAB>録画 00:58:12<TAB>神プレイ            ← lang が "ja"
+2026-10-05 21:14:03<TAB>Stream 01:23:45<TAB>Recording 00:58:12<TAB>best play   ← それ以外
+```
+
+- **「配信」「録画」の語は、押した時の盤の言語に合わせる**（2026-10-05 追加・T-503／T-505 A）。ブラウザが枠を押したときに
+  いまの盤の言語（`getLang()`）を指示の中（暗号化の中）の `args.lang` に入れる。PC は `lang` が **`"ja"` ちょうど**のときだけ
+  `配信`／`録画`、**それ以外（`"en"`・無い・文字列でない・知らない値）は全て `Stream`／`Recording`**（英語へフォールバック）。
+  PC Agent と盤のサーバーが自分の言語を決める仕組みは変えていない（T-506 B）
+
+- 先頭の時刻とファイル名の日付は、**押した瞬間（`at`）をこの PC のタイムゾーンで**表したもの
+- 動いていない方は `配信 -` ／ `録画 -`（英語なら `Stream -` ／ `Recording -`）。ラベルが空なら最後の欄は空（行は `<TAB>` で終わる）
+- 経過時間は `時:分:秒`（秒未満は切り捨て。100 時間を超えても時は 2 桁で切らない）
+- ラベルの中のタブ・改行（制御文字）は空白にする（1 押し 1 行を崩さないため）
+- `agent.log` には `marker ok` ／ `marker failed` だけ書く（ラベルは書かない）。OBS への接続先の行は他の OBS の指示と同じく出る
+- トレイのメニュー **マーカーのフォルダを開く**（"Open the markers folder"）がこのフォルダをエクスプローラーで開く（無ければ作ってから）
+- OBS のチャプターは打たない（T-496 A）。配信サイトのマーカー連携は無い（T-499 A）
+
+**盤の側: この枠は鳴らない**（T-500 B）。盤は指示の中身を読めないので、ブラウザが枠を保存するとき、種類が `marker` なら
+`tasks.quiet`（boolean・平文）を `true`、それ以外の種類では `false` を送る（`POST /api/task` の `quiet`。`true` 以外は false）。
+`quiet` の枠は、PC の返事（成功・失敗・5 秒で誰も取りに来なかった・60 秒で結果が来なかった）で**動くが、通知を送らない**
+（`src/deck.js` の `settle` → `board.js` の `moveTo(..., { silent })`）。利用者が切り替える欄は無い。盤に見えるのは「この枠は鳴らさない」だけ。
+
+`--check-marker` で、OBS につながずに組み立てだけ見られる（`ObsCheck.Pretend` が OBS の役。ファイルは `--write` を付けたときだけ、その場所にだけ書く）:
+
+```
+DeckAgent.exe --check-marker "{\"label\":\"神プレイ\",\"lang\":\"ja\"}"                     # 両方止まっている → verdict failed
+DeckAgent.exe --check-marker "{\"label\":\"神プレイ\",\"lang\":\"ja\"}" --stream 5026200 --lag 1200   # 配信だけ → 配信 01:23:45<TAB>録画 -<TAB>神プレイ
+DeckAgent.exe --check-marker "{\"label\":\"best play\",\"lang\":\"en\"}" --stream 5026200 --lag 1200 # → Stream 01:23:45<TAB>Recording -<TAB>best play
+DeckAgent.exe --check-marker "{\"label\":\"神プレイ\"}" --stream 5026200 --lag 1200                     # lang 無し → Stream 01:23:45<TAB>Recording -<TAB>神プレイ
+DeckAgent.exe --check-marker "{\"label\":\"\",\"lang\":\"ja\"}" --stream 5026200 --record 3493400 --lag 1200 --write <フォルダ>
+```
+
+`--stream`／`--record` は OBS が答える経過ミリ秒（`off` か省略で止まっている）、`--lag` は押してから訊くまでのミリ秒（既定 1000）。
+
 #### `obs` の `args` は 2 つとは限らない（2026-09-13）
 
 `visible` だけは**シーン名・ソース名・どうするか**の 3 つが要るので、`{op, arg}` の 2 つに収まらない。
@@ -287,6 +335,8 @@ DeckAgent.exe --check-obs "{\"op\":\"visible\",\"scene\":\"Main\",\"source\":\"O
 | `result` `ok:true` | `done`、枠は「成功したら」の状態へ。通知が鳴る |
 | `result` `ok:false` | `failed`、枠は「失敗したら」の状態へ。通知が鳴る |
 | 押した瞬間 | 枠は「PC が実行している間」の状態へ。**鳴らない**（押した本人は知っている） |
+
+**例外: `tasks.quiet` の枠（配信マーカー）は、上の表で「通知が鳴る」となっている所でも鳴らない**（動きは同じ。3. の `marker`）。
 
 盤は 5 秒ごとに見回りもするので、盤が再起動しても期限は守られる（数秒の遅れはあり得る）。
 `done`/`failed`/`expired` の行は 1 日で消える。

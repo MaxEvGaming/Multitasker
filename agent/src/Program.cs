@@ -19,6 +19,8 @@ static class Program
     // DeckAgent.exe --check-url <text>               apply the url rule and exit (test/deck-agent.js)
     // DeckAgent.exe --check-obs <args json> [...]    print the OBS requests one sealed instruction
     //                                                composes, against a stub, and exit (ObsCheck.cs)
+    // DeckAgent.exe --check-marker <args json> [...] the stream marker's requests and line, against
+    //                                                the same stub, and exit (ObsCheck.RunMarker)
     [STAThread]
     static int Main(string[] args)
     {
@@ -27,6 +29,7 @@ static class Program
         if (args.Length >= 2 && args[0] == "--check-pair") return PairLink.Check(args[1]);
         if (args.Length >= 2 && args[0] == "--check-url") return UrlRule.Check(args[1]);
         if (args.Length >= 2 && args[0] == "--check-obs") return ObsCheck.Run(args[1], args[2..]);
+        if (args.Length >= 2 && args[0] == "--check-marker") return ObsCheck.RunMarker(args[1], args[2..]);
 
         string? configPath = null;
         string? pairText = null;

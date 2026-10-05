@@ -261,7 +261,7 @@ export async function ackJob(userId, jobId) {
 // the whole of what the owner sees, which is what was asked for.
 export async function finishJob(userId, jobId, resultOk) {
   const job = await one(
-    `select j.*, t.slot, t.title, t.title_cipher, t.state_id, t.run_state_id, t.ok_state_id, t.fail_state_id
+    `select j.*, t.slot, t.title, t.title_cipher, t.state_id, t.run_state_id, t.ok_state_id, t.fail_state_id, t.quiet
        from jobs j left join tasks t on t.id = j.task_id
       where j.user_id = $1 and j.id = $2`, [userId, jobId]);
   if (!job || !job.sealed) return { ok: false, status: 404, text: 'unknown job' };
@@ -290,16 +290,20 @@ const squareOf = (row) => ({
 
 // Moves the square to where the outcome says. The square may have been
 // deleted in the meantime; then there is nothing to move and nothing to say.
+//
+// A square marked quiet (a stream marker, T-500 = B) moves the same and does
+// not ring — for every answer that lands here: success, failure, nobody
+// coming for it, and no verdict inside the minute.
 async function settle(userId, job, cause) {
   if (!job.task_id || !job.state_id) return;
   const { ok, fail } = await commandStates(userId, job);
   const target = cause === 'done' ? ok : fail;
-  if (target) await moveTo(userId, squareOf(job), target, cause);
+  if (target) await moveTo(userId, squareOf(job), target, cause, { silent: job.quiet === true });
 }
 
 async function expireIfUncollected(jobId) {
   const job = await one(
-    `select j.*, t.slot, t.title, t.title_cipher, t.state_id, t.run_state_id, t.ok_state_id, t.fail_state_id
+    `select j.*, t.slot, t.title, t.title_cipher, t.state_id, t.run_state_id, t.ok_state_id, t.fail_state_id, t.quiet
        from jobs j left join tasks t on t.id = j.task_id
       where j.id = $1 and j.status = 'pending' and j.sealed <> ''
         and j.created_at <= now() - make_interval(secs => $2)`,
@@ -312,7 +316,7 @@ async function expireIfUncollected(jobId) {
 
 async function failIfUnanswered(jobId) {
   const job = await one(
-    `select j.*, t.slot, t.title, t.title_cipher, t.state_id, t.run_state_id, t.ok_state_id, t.fail_state_id
+    `select j.*, t.slot, t.title, t.title_cipher, t.state_id, t.run_state_id, t.ok_state_id, t.fail_state_id, t.quiet
        from jobs j left join tasks t on t.id = j.task_id
       where j.id = $1 and j.status = 'taken'
         and j.taken_at <= now() - make_interval(secs => $2)`,

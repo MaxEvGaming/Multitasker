@@ -19,7 +19,7 @@
     <Product>Multitasker PC Agent</Product>
     <AssemblyTitle>Multitasker PC Agent</AssemblyTitle>
     <Company>Max EV Gathering</Company>
-    <Version>0.3.2</Version>
+    <Version>0.4.0</Version>
 
     <!-- Published as one self-contained exe (build.ps1). Native pieces are
          unpacked at first run rather than looked up beside the exe, so the

@@ -143,7 +143,7 @@ export async function board(userId, pageId = null) {
   const tasks = current ? await q(
     `select t.id, t.slot, t.title, t.title_cipher, t.match_key, t.name_cipher, t.match_hash,
             t.state_id, t.expected_seconds, t.state_since,
-            t.command_sealed, t.run_state_id, t.ok_state_id, t.fail_state_id, t.agent_id,
+            t.command_sealed, t.run_state_id, t.ok_state_id, t.fail_state_id, t.agent_id, t.quiet,
             extract(epoch from (now() - t.state_since))::int as seconds_in_state
        from tasks t where t.page_id = $1 order by t.slot`,
     [current.id]
@@ -200,7 +200,11 @@ export async function board(userId, pageId = null) {
 // Exported for the command squares (src/deck.js), which move on the PC's
 // word rather than on a tap or a report, and go through the same door so the
 // move is recorded and announced by the same rules.
-export async function moveTo(userId, task, toStateId, cause) {
+//
+// `silent` leaves the notification out and changes nothing else: the move is
+// made and recorded the same. It is for the PC's answer on a square marked
+// quiet (src/deck.js settle, T-500 = B).
+export async function moveTo(userId, task, toStateId, cause, { silent = false } = {}) {
   const from = await one('select name, name_cipher from states where id = $1', [task.state_id]);
   const to = await one('select id, name, name_cipher from states where id = $1 and user_id = $2',
     [toStateId, userId]);
@@ -230,7 +234,7 @@ export async function moveTo(userId, task, toStateId, cause) {
     failed: say(lang, 'why.failed'),
     expired: say(lang, 'why.expired'),
   };
-  if (WHY[cause]) {
+  if (WHY[cause] && !silent) {
     // Once an account is encrypted the server has no words to write: it holds
     // the title and the state names only as ciphertext. It sends those along
     // with a code for the reason, and the phone puts the sentence together.

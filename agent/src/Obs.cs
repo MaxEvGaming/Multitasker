@@ -82,6 +82,16 @@ public static class Obs
             return false;
         }
 
+        return await WithLinkAsync(s, timeout, ct, (link, token) => CarryAsync(link, i, token));
+    }
+
+    // An identified connection to OBS for as long as `use` runs, then closed.
+    // Shared by the instructions above and by the stream marker (Marker.cs),
+    // which only asks. A refused connection, a wrong password or the timeout
+    // is thrown, as it always was.
+    public static async Task<T> WithLinkAsync<T>(Settings s, TimeSpan timeout, CancellationToken ct,
+        Func<ILink, CancellationToken, Task<T>> use)
+    {
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
         deadline.CancelAfter(timeout);
         var token = deadline.Token;
@@ -119,7 +129,7 @@ public static class Obs
 
         try
         {
-            return await CarryAsync(new SocketLink(ws), i, token);
+            return await use(new SocketLink(ws), token);
         }
         finally
         {

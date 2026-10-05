@@ -16,7 +16,9 @@ public sealed class JobPlain
     // `exec` (one line handed to cmd.exe) was stopped on 2026-09-14: it ran
     // anything, with nothing to hold it back. It is refused like any kind this
     // program does not know (docs/DECK_AGENT_PROTOCOL.md §3).
-    public static readonly string[] Kinds = { "open", "url", "hotkey", "text", "obs" };
+    // `marker` (2026-10-05) asks OBS how far into the stream and the
+    // recording the press came and writes it to a file here (Marker.cs).
+    public static readonly string[] Kinds = { "open", "url", "hotkey", "text", "obs", "marker" };
 
     public string Arg(string name)
     {
@@ -45,6 +47,7 @@ public static class Executor
                 // a choice (docs/DECK_AGENT_PROTOCOL.md §3 `text`).
                 case "text": return TypeText(job.Arg("key"), job.Arg("text"), paced: job.Arg("mode") != "burst");
                 case "obs": return await Obs.RunAsync(settings, Obs.Instruction.From(job), settings.Timeout, ct);
+                case "marker": return await Marker.RunAsync(settings, job, settings.Timeout, ct);
                 default:
                     Log.Write($"job {job.Id}: unknown kind");
                     return false;

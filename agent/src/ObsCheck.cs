@@ -66,6 +66,63 @@ public static class ObsCheck
         return ok ? 0 : 1;
     }
 
+    // `DeckAgent.exe --check-marker '<args>' [--stream <ms>|off] [--record <ms>|off]
+    //                [--lag <ms>] [--write <folder>]`
+    //
+    // The stream marker (Marker.cs) against the same stub: `--stream` and
+    // `--record` are how far in OBS says it is when asked (off = not running;
+    // both off by default), `--lag` is how long before the asking the press
+    // was (1000 by default). Prints the requests, the line, and the verdict.
+    // Writes nothing unless `--write` names a folder, and then only there —
+    // never into %APPDATA%. Output is UTF-8, because the line can be Japanese.
+    public static int RunMarker(string argsJson, string[] rest)
+    {
+        long? stream = null, record = null;
+        long lag = 1000;
+        string? folder = null;
+        for (var i = 0; i < rest.Length; i += 1)
+        {
+            if (rest[i] == "--stream" && i + 1 < rest.Length) stream = Ms(rest[++i]);
+            else if (rest[i] == "--record" && i + 1 < rest.Length) record = Ms(rest[++i]);
+            else if (rest[i] == "--lag" && i + 1 < rest.Length) long.TryParse(rest[++i], out lag);
+            else if (rest[i] == "--write" && i + 1 < rest.Length) folder = rest[++i];
+        }
+
+        using var stdout = new StreamWriter(Console.OpenStandardOutput(), new System.Text.UTF8Encoding(false)) { AutoFlush = true };
+        Dictionary<string, JsonElement>? args;
+        try
+        {
+            args = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(argsJson);
+        }
+        catch (Exception e)
+        {
+            stdout.WriteLine($"error cannot read the args: {e.Message}");
+            return 1;
+        }
+
+        // Whole milliseconds, as `at` is, so `--lag` is exactly the lag.
+        var now = DateTimeOffset.FromUnixTimeMilliseconds(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+        var job = new JobPlain { Id = "check", Kind = "marker", At = now.ToUnixTimeMilliseconds() - lag, Args = args };
+        stdout.WriteLine($"pretend     stream {(stream == null ? "off" : $"{stream} ms")}, record {(record == null ? "off" : $"{record} ms")}, pressed {lag} ms before asking");
+
+        var link = new Pretend(1, true) { StreamMs = stream, RecordMs = record };
+        var line = Marker.ComposeAsync(link, job.At, job.Arg("label"), job.Arg("lang"), () => now, CancellationToken.None).GetAwaiter().GetResult();
+        stdout.WriteLine($"requests {link.Sent}");
+        if (line == null)
+        {
+            stdout.WriteLine("line (none)");
+            stdout.WriteLine("verdict failed");
+            return 1;
+        }
+        stdout.WriteLine($"line {line.Replace("\t", "<TAB>")}");
+        if (folder != null)
+            stdout.WriteLine($"written {Marker.Append(folder, Marker.Pressed(job.At), line)}");
+        stdout.WriteLine("verdict ok");
+        return 0;
+    }
+
+    static long? Ms(string text) => long.TryParse(text, out var n) ? n : null;
+
     // Writes down what it is asked and answers the way OBS's protocol.md says
     // OBS would: a lookup past the last match of a name is ResourceNotFound
     // (600), and the two requests that ask something answer with the field
@@ -73,6 +130,11 @@ public static class ObsCheck
     sealed class Pretend(int holds, bool showing) : Obs.ILink
     {
         public int Sent { get; private set; }
+
+        // For the stream marker: how far into the stream and the recording
+        // OBS says it is, in ms; null is not running.
+        public long? StreamMs { get; init; }
+        public long? RecordMs { get; init; }
 
         public Task<Obs.Reply> AskAsync(string requestType, object? requestData, CancellationToken ct, bool refusalIsAnAnswer = false)
         {
@@ -91,10 +153,21 @@ public static class ObsCheck
                 }
                 case "GetSceneItemEnabled":
                     return Answered($"{{\"sceneItemEnabled\": {(showing ? "true" : "false")}}}");
+                case "GetStreamStatus":
+                    return Answered(Status(StreamMs));
+                case "GetRecordStatus":
+                    return Answered(Status(RecordMs));
                 default:
                     return Answered(null);
             }
         }
+
+        // The fields protocol.md lists for both requests that matter here:
+        // outputActive, and outputDuration in milliseconds (0 when stopped).
+        static string Status(long? ms) =>
+            ms == null
+                ? "{\"outputActive\": false, \"outputDuration\": 0}"
+                : $"{{\"outputActive\": true, \"outputDuration\": {ms.Value}}}";
 
         static Task<Obs.Reply> Answered(string? responseData) =>
             Task.FromResult(new Obs.Reply(true, 100, "",

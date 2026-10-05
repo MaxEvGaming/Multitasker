@@ -6,12 +6,15 @@
 // Also the refusals: no command on an unencrypted board, no stream for a token
 // nobody has, no touching another account's instruction, and a ceiling.
 import fs from 'node:fs';
+import https from 'node:https';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import { subKeysFrom, encryptText, decryptText, toB64 } from '../public/crypto.js';
 import {
   pairLink, parsePairLink, normalizeUrl, isMobile, PAIR_PREFIX, TEXT_MAX, textTooLong, TEXT_MODES, textMode,
+  MARKER_LABEL_MAX, markerLabel, markerArgs,
 } from '../public/pair.js';
 import { newAccount } from './browser.js';
 
@@ -204,6 +207,35 @@ console.log('the way a text square types is chosen per square');
   check('no mode at all reads as burst', textMode({ key: 't', text: 'hi' }) === 'burst'
     && textMode({}) === 'burst' && textMode(undefined) === 'burst' && textMode(null) === 'burst');
   check('and so does a value nobody knows', textMode({ mode: 'fast' }) === 'burst' && textMode({ mode: true }) === 'burst');
+}
+
+// A stream marker's label is optional and held to 40 characters on the board
+// (docs/briefs/marker.md). Counted the way the text ceiling is.
+console.log('a stream marker\'s label has a ceiling');
+{
+  check('the ceiling is 40 characters', MARKER_LABEL_MAX === 40, String(MARKER_LABEL_MAX));
+  check('40 are kept whole', markerLabel('x'.repeat(40)) === 'x'.repeat(40));
+  check('the 41st is cut off', markerLabel('x'.repeat(41)) === 'x'.repeat(40));
+  check('Japanese counts one a character', markerLabel('あ'.repeat(45)) === 'あ'.repeat(40));
+  const astral = '\u{1F642}';
+  check('a character outside the basic plane counts once', markerLabel(astral.repeat(45)) === astral.repeat(40));
+  check('none at all is an empty label', markerLabel('') === '' && markerLabel(null) === '' && markerLabel(undefined) === '');
+}
+
+// What a pressed marker carries: its label and the board's language at the
+// press (2026-10-05, T-505 = A). The PC writes 配信／録画 for "ja" and
+// Stream／Recording for anything else (agent --check-marker).
+console.log('a pressed stream marker carries the board\'s language');
+{
+  check('Japanese', JSON.stringify(markerArgs({ label: '神プレイ' }, 'ja')) === '{"label":"神プレイ","lang":"ja"}',
+    JSON.stringify(markerArgs({ label: '神プレイ' }, 'ja')));
+  check('English', JSON.stringify(markerArgs({ label: 'best play' }, 'en')) === '{"label":"best play","lang":"en"}',
+    JSON.stringify(markerArgs({ label: 'best play' }, 'en')));
+  check('the label is still held to 40 characters', markerArgs({ label: 'x'.repeat(41) }, 'ja').label === 'x'.repeat(40));
+  check('no label is an empty one', markerArgs({}, 'en').label === '' && markerArgs(null, 'en').label === ''
+    && markerArgs({ label: 3 }, 'en').label === '');
+  check('a saved square\'s other keys do not ride along', Object.keys(markerArgs({ label: 'a', lang: 'xx', extra: 1 }, 'ja')).join() === 'label,lang'
+    && markerArgs({ label: 'a', lang: 'xx' }, 'ja').lang === 'ja');
 }
 
 console.log('a phone is told apart from a PC');
@@ -603,6 +635,114 @@ console.log('another account\'s instruction is not this PC\'s business');
   const mine = await agentPost(token, `/jobs/${id}/ack`);
   check('while the right PC can still take it', mine.status === 200, `${mine.status} ${mine.text}`);
   await agentPost(token, `/jobs/${id}/result`, { ok: true });
+}
+
+// The stream marker (2026-10-05): the instruction is made and reaches the PC
+// like any other; and its square, marked quiet when saved, moves on the PC's
+// answer without ringing (T-500 = B). Counted at a stand-in push service, the
+// way test/push-rule.js does — and checked against an ordinary square on the
+// same phone first, so a silence here means quiet and not "push is not
+// working". Needs what push-rule needs: test/*.pem and the notification keys.
+console.log('a stream marker');
+{
+  const CAPTURE_PORT = Number(process.env.CAPTURE_PORT || 3099);
+  let received = 0;
+  const capture = https.createServer({
+    key: fs.readFileSync(path.join(HERE, 'key.pem')),
+    cert: fs.readFileSync(path.join(HERE, 'cert.pem')),
+  }, (req, res) => {
+    req.resume();
+    req.on('end', () => { received += 1; res.writeHead(201); res.end(); });
+  });
+  await new Promise((done) => capture.listen(CAPTURE_PORT, '127.0.0.1', done));
+  const endpoint = `https://127.0.0.1:${CAPTURE_PORT}/push`;
+  const ecdh = crypto.createECDH('prime256v1');
+  await db.query(
+    `insert into push_subscriptions(user_id, endpoint, p256dh, auth) values ($1, $2, $3, $4)
+     on conflict (endpoint) do update set user_id = excluded.user_id,
+           p256dh = excluded.p256dh, auth = excluded.auth`,
+    [userId, endpoint, ecdh.generateKeys().toString('base64url'), crypto.randomBytes(16).toString('base64url')]);
+  check('the server has push keys configured', (await call('/api/me')).data.pushConfigured === true);
+
+  const stream = await openStream(token);
+  // Presses the square with the given instruction and answers as the PC:
+  // `ok` true or false, or null to never come for it.
+  const pressAndAnswer = async (kind, args, ok) => {
+    r = await call('/api/job/new', { taskId: square.id });
+    const id = r.data.id;
+    const at = Date.now();
+    await call('/api/job/submit', { id, page: board.page, sealed: await seal({ id, at, kind, args }) });
+    const job = await stream.next();
+    if (ok !== null) {
+      await agentPost(token, `/jobs/${id}/ack`);
+      await agentPost(token, `/jobs/${id}/result`, { ok });
+      await wait(1500);
+    } else {
+      await wait(7000);
+    }
+    return { id, at, job };
+  };
+
+  received = 0;
+  await pressAndAnswer('url', { url: 'https://example.com' }, true);
+  check('an ordinary square on this phone rings once when the PC answers', received === 1, `received ${received}`);
+
+  r = await call('/api/task', { taskId: square.id, page: board.page,
+    commandSealed: await seal({ kind: 'marker', args: { label: '神プレイ' } }), quiet: true });
+  check('a marker square is saved', r.status === 200, JSON.stringify(r.data));
+  board = r.data;
+  check('the board holds it as quiet', first(board).quiet === true, String(first(board).quiet));
+  const stored = JSON.parse(await decryptText(dataKey, first(board).command_sealed));
+  check('and the command, sealed, is the marker with its label', stored.kind === 'marker'
+    && stored.args.label === '神プレイ', JSON.stringify(stored));
+  check('which the database cannot read', !first(board).command_sealed.includes('marker'));
+
+  received = 0;
+  const { id, at, job } = await pressAndAnswer('marker', markerArgs({ label: '神プレイ' }, 'ja'), true);
+  check('the PC is handed the marker', job && job.id === id, JSON.stringify(job));
+  const opened = job ? JSON.parse(await decryptText(dataKey, job.sealed)) : null;
+  check('and opens it as {"kind":"marker","args":{"label":…,"lang":"ja"}} with the press time',
+    Boolean(opened) && opened.kind === 'marker' && opened.args.label === '神プレイ' && opened.args.lang === 'ja'
+    && opened.id === id && opened.at === at, JSON.stringify(opened));
+  board = (await call('/api/board')).data;
+  check('success still moves the square to Waiting', nameOf(board, first(board).state_id) === 'Waiting',
+    nameOf(board, first(board).state_id));
+  check('but nothing rang', received === 0, `received ${received}`);
+
+  received = 0;
+  await pressAndAnswer('marker', markerArgs({ label: '' }, 'en'), false);
+  board = (await call('/api/board')).data;
+  check('a failure moves it to Stopped', nameOf(board, first(board).state_id) === 'Stopped',
+    nameOf(board, first(board).state_id));
+  const lastCause = async () => (await db.query(
+    'select cause from moves where task_id = $1 order by id desc limit 1', [square.id])).rows[0].cause;
+  check('recorded as the failure', (await lastCause()) === 'failed');
+  check('and rings nothing either', received === 0, `received ${received}`);
+
+  received = 0;
+  await pressAndAnswer('marker', markerArgs({ label: '' }, 'en'), null);
+  board = (await call('/api/board')).data;
+  check('nobody coming for it moves it to Stopped', nameOf(board, first(board).state_id) === 'Stopped',
+    nameOf(board, first(board).state_id));
+  check('recorded as the expiry', (await lastCause()) === 'expired');
+  check('and rings nothing', received === 0, `received ${received}`);
+
+  // Anything but a strict true is not quiet; and saved back as an ordinary
+  // command, the same square rings again.
+  r = await call('/api/task', { taskId: square.id, page: board.page, quiet: 'yes' });
+  check('quiet is only ever a strict true', first(r.data).quiet === false, String(first(r.data).quiet));
+  r = await call('/api/task', { taskId: square.id, page: board.page,
+    commandSealed: await seal({ kind: 'url', args: { url: 'https://example.com' } }), quiet: false });
+  board = r.data;
+  check('back to an ordinary command, not quiet', first(board).quiet === false);
+  received = 0;
+  await pressAndAnswer('url', { url: 'https://example.com' }, true);
+  check('and it rings once again', received === 1, `received ${received}`);
+
+  stream.close();
+  await db.query('delete from push_subscriptions where endpoint = $1', [endpoint]);
+  capture.close();
+  await wait(200);
 }
 
 console.log('registering again adds a second PC rather than replacing the first');

@@ -56,6 +56,7 @@ public sealed class TrayApp : ApplicationContext
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(Strings.T("menu.settings"), null, (_, _) => ShowSettings());
         menu.Items.Add(Strings.T("menu.reconnect"), null, (_, _) => Reconnect());
+        menu.Items.Add(Strings.T("menu.markers"), null, (_, _) => OpenMarkers());
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(Strings.T("menu.exit"), null, (_, _) => Quit());
 
@@ -281,6 +282,18 @@ public sealed class TrayApp : ApplicationContext
         // can (docs/DECK_AGENT_PROTOCOL.md §1).
         if (form.GuardChanged) _ = Worker.SetGuardAsync(settings, settings.Guard);
         Restart();
+    }
+
+    // Where the stream marker writes its lines (Marker.cs), in Explorer. Made
+    // first if no marker has been written yet, so the menu never opens nothing.
+    static void OpenMarkers()
+    {
+        try
+        {
+            Directory.CreateDirectory(Marker.Folder);
+            using var p = Process.Start(new ProcessStartInfo(Marker.Folder) { UseShellExecute = true });
+        }
+        catch (Exception e) { Log.Write($"markers: could not open the folder: {e.Message}"); }
     }
 
     static void OpenInBrowser(string url)

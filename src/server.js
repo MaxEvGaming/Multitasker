@@ -423,6 +423,11 @@ const routes = {
       }
       put('command_sealed', sealed);
     }
+    // Whether the PC's answer rings the phone for this square. The browser
+    // sends true when the command is a stream marker and false otherwise
+    // (T-500 = B); the board cannot tell for itself, because the command is
+    // sealed. Only a strict true counts.
+    if ('quiet' in body) put('quiet', body.quiet === true);
     // Where it goes while running, on success, on failure. Checked against
     // this account's states: the ids arrive from a browser, and pointing a
     // square at somebody else's state is not something it should be able to do.

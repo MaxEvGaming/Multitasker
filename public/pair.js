@@ -108,6 +108,28 @@ export function textMode(args) {
   return args && args.mode === 'paced' ? 'paced' : 'burst';
 }
 
+/* ---------------------------------------------------------- stream marker */
+
+// A stream marker square writes, on the PC, how far into the stream and the
+// recording the press came, with a short label of the square's own beside it
+// (docs/DECK_AGENT_PROTOCOL.md §3 `marker`). The label is optional and is held
+// to 40 characters here, on the board. Counted in characters, the way
+// TEXT_MAX is, so a character outside the basic plane is one.
+export const MARKER_LABEL_MAX = 40;
+
+export function markerLabel(text) {
+  return [...String(text ?? '')].slice(0, MARKER_LABEL_MAX).join('');
+}
+
+// What a pressed marker square carries, inside the sealed instruction: its
+// label, always a string, and the board's language at the moment of the press
+// (2026-10-05, T-503 / T-505 = A). The PC writes the words of the line in
+// Japanese when that is "ja" and in English for anything else.
+export function markerArgs(args, lang) {
+  const label = args && typeof args.label === 'string' ? args.label : '';
+  return { label: markerLabel(label), lang: String(lang ?? '') };
+}
+
 /* ------------------------------------------------------------- the phone */
 
 // A phone cannot run the PC program, so on one the board shows the connect

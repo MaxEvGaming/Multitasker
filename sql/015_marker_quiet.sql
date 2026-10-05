@@ -1,0 +1,13 @@
+-- A square that does not ring when the PC answers (T-500 = B, Owner
+-- 2026-10-05: 『500：B』— the stream marker's square alone stays silent).
+--
+-- The board cannot read what a square's command is: it is sealed in the
+-- browser. So the browser says it, in the clear, when it saves the square:
+-- true when the command is a stream marker, false for every other kind. That
+-- one bit is all the board learns — "this square does not ring" — and nothing
+-- about what the command does. There is no switch for it on screen; it follows
+-- the kind.
+--
+-- The square still moves on the PC's answer exactly as before. Only the
+-- notification is left out (src/deck.js settle).
+alter table tasks add column if not exists quiet boolean not null default false;

@@ -36,7 +36,10 @@ Pressing it (either half) sends an instruction to the PC instead of following th
 
 - **What it can do**: open an app or a file / open a URL /
   press a hotkey (written `ctrl+shift+f13`) / type text (press the key that opens chat → type the line → Enter; for game commands) /
-  OBS (switch scene, recording, streaming, mute or unmute an audio source, show or hide a source).
+  OBS (switch scene, recording, streaming, mute or unmute an audio source, show or hide a source) /
+  stream marker (press it, without typing anything, at a moment worth clipping: the PC asks OBS how far into the stream and the recording
+  that press came, and adds a line with the two times and the square's own label to a file of the day on the PC.
+  Fails when neither is running. This one square does not ring when the PC answers).
   Running a command (one line handed to `cmd /c`) **was switched off on 2026-09-14, because it ran any one line with nothing to hold it back**
 - **How the square moves**: press → the **While the PC is working** state (default: Running) → on success, the **When it succeeds** state (default: Waiting);
   on failure, the **When it fails** state (default: Stopped). All three can be chosen per square, from your own states
@@ -177,7 +180,7 @@ is closed (in case the account had been taken over).
 
 ## Running the tests (local)
 
-There are 27. **19 need the server and a database, and 3 of those (`push-rule` `start-signal` `tenancy`) also need the self-signed certificate and the notification keys.**
+There are 27. **19 need the server and a database, and 4 of those (`push-rule` `start-signal` `tenancy` `deck`) also need the self-signed certificate and the notification keys.**
 `deck-seal-agent` and `deck-agent` also need the PC Agent's exe.
 When something is missing it looks like "exited abnormally" or "0 notifications", but that is the environment falling short, not a fault.
 

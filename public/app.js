@@ -1,5 +1,7 @@
 import { settingsOrder } from '/settings-order.js';
-import { pairLink, normalizeUrl, isMobile, TEXT_MAX, textTooLong, TEXT_MODES, textMode } from '/pair.js';
+import {
+  pairLink, normalizeUrl, isMobile, TEXT_MAX, textTooLong, TEXT_MODES, textMode, markerLabel, markerArgs,
+} from '/pair.js';
 import {
   t, setLang, getLang, applyStatic, langNameInEnglish, LANGUAGES, DEFAULT_LANG,
 } from '/i18n.js';
@@ -120,7 +122,10 @@ async function openBoard(board) {
 // anything, with nothing to hold it back. A square still sealed with it reads
 // as an ordinary square: its editor opens on 「なし」, a press follows the
 // arrows, and the next save clears the seal.
-const COMMAND_KINDS = ['open', 'url', 'hotkey', 'text', 'obs'];
+// `marker` (配信マーカー, 2026-10-05) writes down on the PC how far into the
+// stream and the recording the press came; its square does not ring when the
+// PC answers (T-500 = B), which the board learns from `quiet` on save.
+const COMMAND_KINDS = ['open', 'url', 'hotkey', 'text', 'obs', 'marker'];
 const OBS_OPS = ['scene', 'record', 'stream', 'mute', 'visible'];
 // `text` types a line into whatever window is in front of the PC: a key to
 // open the game's chat, the line, then Enter. The games are here only to fill
@@ -513,9 +518,12 @@ async function runCommand(task) {
     // A text square always travels with its typing mode spelled out, so the
     // PC program's own fallback for a missing one (paced) is never reached
     // and the default the board shows (burst, T-092) is the one that runs.
-    const args = task.command.kind === 'text'
-      ? { ...task.command.args, mode: textMode(task.command.args) }
-      : task.command.args;
+    // A marker always carries its label as a string, empty when none was
+    // given, and the board's language now, which the PC writes the line in
+    // (docs/DECK_AGENT_PROTOCOL.md §3 `marker`).
+    let args = task.command.args;
+    if (task.command.kind === 'text') args = { ...args, mode: textMode(args) };
+    if (task.command.kind === 'marker') args = markerArgs(args, getLang());
     const sealed = await encryptText(state.keys.dataKey, JSON.stringify({
       id: String(id), at: Date.now(), kind: task.command.kind, args,
     }));
@@ -1246,6 +1254,10 @@ function slotEditor(task) {
         // read with nothing.
         ...(chosen ? {
           commandSealed: chosen.command ? await sealText(JSON.stringify(chosen.command)) : null,
+          // Not sealed either: whether the PC's answer rings the phone. A
+          // stream marker does not (T-500 = B); every other kind does. It says
+          // only that, never what the command is.
+          quiet: Boolean(chosen.command && chosen.command.kind === 'marker'),
           runStateId: chosen.run, okStateId: chosen.ok, failStateId: chosen.fail,
           // Not sealed: the board has to read this one to know where to send.
           // It says which PC, never what the instruction is.
@@ -1433,6 +1445,14 @@ function commandEditor(task) {
     typing.append(opt);
   }
 
+  // A stream marker's label, held to MARKER_LABEL_MAX characters as it is
+  // typed (public/pair.js). Optional.
+  const markerText = text('settings.command.markerLabel', args.label);
+  markerText.addEventListener('input', () => {
+    const kept = markerLabel(markerText.value);
+    if (kept !== markerText.value) markerText.value = kept;
+  });
+
   const obsOp = document.createElement('select');
   for (const op of OBS_OPS) {
     const opt = document.createElement('option');
@@ -1487,6 +1507,7 @@ function commandEditor(task) {
     visScene: field(t('settings.command.obsScene'), visScene),
     visSource: field(t('settings.command.obsItem'), visSource),
     visState: field(t('settings.command.obsVisible'), visState),
+    markerLabel: field(t('settings.command.markerLabel'), markerText),
     pc: field(t('settings.command.pc'), pc),
     run: field(t('settings.command.runState'), run),
     ok: field(t('settings.command.okState'), ok),
@@ -1504,7 +1525,7 @@ function commandEditor(task) {
     hints[name] = hint;
   }
   for (const [name, row] of Object.entries(rows)) {
-    if (['kind', 'open', 'url', 'hotkey', 'textKey', 'text'].includes(name)) row.classList.add('wide');
+    if (['kind', 'open', 'url', 'hotkey', 'textKey', 'text', 'markerLabel'].includes(name)) row.classList.add('wide');
     node.append(row);
     if (hints[name]) node.append(hints[name]);
     if (name === 'obsOp') node.append(hints.obs);
@@ -1535,6 +1556,7 @@ function commandEditor(task) {
     rows.obsSwitch.hidden = !(obs && (op === 'record' || op === 'stream'));
     for (const name of ['visScene', 'visSource', 'visState']) rows[name].hidden = !visible;
     hints.obsVisible.hidden = !visible;
+    rows.markerLabel.hidden = k !== 'marker';
     if (named) {
       const label = t(obsOp.value === 'scene' ? 'settings.command.obsScene' : 'settings.command.obsSource');
       rows.obsName.firstChild.textContent = label;
@@ -1581,6 +1603,7 @@ function commandEditor(task) {
         command = { kind: k, args: { op, arg } };
       }
     }
+    if (k === 'marker') command = { kind: k, args: { label: markerLabel(markerText.value.trim()) } };
     return { command, run: run.value, ok: ok.value, fail: fail.value, pc: pc.value };
   };
 
