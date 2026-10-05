@@ -154,7 +154,7 @@ docker exec <Caddy のコンテナ名> caddy reload --config /etc/caddy/Caddyfil
 `-i` を付けて書き直し、`cat` で中身を見てから reload する（2026-09-14 に実際に踏んだ）。
 
 **ドメインを変えるとき**（2026-09-14 に実施）: 上の block のサーバー名を変えて reload →
-`.env` の `SITE_URL` を新しい住所に → コンテナを立て直す（§7.5 の後半だけ。イメージは焼き直さない）→
+`.env` の `SITE_URL` を新しい住所に → コンテナを立て直す（§7.5 の後半だけ。イメージは build し直さない）→
 **スマホは新しい住所でホーム画面に追加し直して通知を有効にし直す**（通知の登録は住所ごと）→
 **PC は「この PC をつなぐ」をやり直す**（PC は盤の住所を覚えている）。
 
@@ -277,8 +277,19 @@ docker exec <pg> psql -U <ユーザー> -c "drop database restore_check;"
 **サーバーは Graviton（arm64）。** x86 の PC で普通に `docker build` すると
 動かないイメージができる。`--platform linux/arm64` が要る。
 
-**【デプロイ PC / Git Bash】** 一発で流す（2026-09-14 差し替え、2026-09-16 訂正）。**どの段で失敗しても止まり、最後に「載った版＝送った版」を照合する。**
+**【デプロイ PC / Git Bash】** 一発で流す（2026-09-14 差し替え、2026-09-16 訂正、2026-10-05 フォルダと clone し直しを訂正）。**どの段で失敗しても止まり、最後に「載った版＝送った版」を照合する。**
 それまでの形（`… ; docker save …`）は、`git pull` や `build.ps1` が失敗しても `;` の後へ進んで**手元に残った古いイメージを送り、健康確認が通るので成功に見えた**（T-086）。
+
+**`<リポジトリ>` は、GitHub の `MaxEvGaming/Multitasker` を clone したフォルダ（一番上に `Dockerfile` と `agent/` がある所）。**
+**2026-09-29 より前に clone したフォルダは使えない。** その日にリポジトリを公開用に作り直し、前の非公開の履歴（いまの `MaxEvGaming/Multitasker-archive`）と
+新しい履歴には共通の commit が無いので、下の `git pull --ff-only` で止まる。一度だけ clone し直す:
+
+```bash
+git clone https://github.com/MaxEvGaming/Multitasker.git <新しいフォルダ>
+```
+
+`public/download/DeckAgentSetup.exe` は git に入っていないので、新しいフォルダには無い。下の手順の中の `build.ps1` が作るので、手で写す必要は無い
+（その PC に .NET 10 SDK と Inno Setup 6.3+ が要る。§7.6）。
 
 **全体を `(` と `)` で囲ってある。外すと、貼り付けた Git Bash そのものが `set -e` で終了して窓が閉じ、失敗した段のエラーが読めない**（2026-09-16 T-097＝「途中でクラッシュする」ように見えた）。囲ってあれば、失敗した段で止まり、そのエラーと `== 失敗:` の行が画面に残る。
 
@@ -286,7 +297,7 @@ docker exec <pg> psql -U <ユーザー> -c "drop database restore_check;"
 KEY=<鍵>; HOST=<ユーザー>@<サーバー>; BOARD=https://<盤>; H=/home/<ユーザー>; DB=board; WEB=<Caddy と同じネットワーク>; CADDY=<Caddy のコンテナ名>
 (
 set -e
-cd <リポジトリ>/projects/taskboard
+cd <リポジトリ>
 git pull --ff-only
 echo "== deploying $(git log --oneline -1)"
 powershell -NoProfile -ExecutionPolicy Bypass -File ./agent/build.ps1
@@ -382,41 +393,41 @@ docker exec taskboard node -e "fetch('http://127.0.0.1:3040/api/health').then(r=
 
 盤の **設定 → PC → ① ダウンロード** は `https://<盤>/download/DeckAgentSetup.exe` を配り、
 PC のアプリは `https://<盤>/download/agent/version.json` を見て更新を知る。
-**この 2 つはイメージに焼き込む静的ファイル**（`Dockerfile` が `public/` を丸ごと COPY する）で、
-**exe は git に入っていない**（33 MB・`.gitignore`）。だからデプロイのたびに、**焼く前に** `public/download/` に置く。
+**この 2 つはイメージに入れる静的ファイル**（`Dockerfile` が `public/` を丸ごと COPY する）で、
+**exe は git に入っていない**（33 MB・`.gitignore`）。だからデプロイのたびに、**イメージを build する前に** `public/download/` に置く。
 
 **【Windows の PC / PowerShell】** exe とインストーラを作って `public/download/` に置く（.NET 10 SDK と Inno Setup 6.3+ が要る。
 ISCC は `%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe` を探す）:
 
 ```powershell
-cd <リポジトリ>\projects\taskboard
+cd <リポジトリ>
 .\agent\build.ps1
 ```
 
-最後に次の 2 行が出ること:
+最後に次の 2 行が出ること（`<版>` は `agent/DeckAgent.csproj` の `<Version>`）:
 
 ```
 == copied to ...\public\download\DeckAgentSetup.exe
-== wrote  ...\public\download\agent\version.json: {"version":"0.2.0","file":"DeckAgentSetup.exe"}
+== wrote  ...\public\download\agent\version.json: {"version":"<版>","file":"DeckAgentSetup.exe"}
 ```
 
 版は `agent/DeckAgent.csproj` の `<Version>` が正本。上げるときはそこだけ変えて `build.ps1` を回せば、
 インストーラの版表示・`version.json`・アプリが名乗る版が揃う。**`version.json` は git に入っているので、
-版を上げたら commit する**（そうしないと別の PC で焼いたイメージが古い版を名乗る）。
+版を上げたら commit する**（そうしないと別の PC で build したイメージが古い版を名乗る）。
 
 そのあと **7.5 の手順そのまま**（`docker buildx build --platform linux/arm64 …` → `docker save | ssh … docker load` → 入れ替え）。
-**Windows で焼くなら `build.ps1` の直後に同じ PC で `docker buildx build` を実行する。** 別の PC（Linux 等）で焼く場合は、
+**Windows で build するなら `build.ps1` の直後に同じ PC で `docker buildx build` を実行する。** 別の PC（Linux 等）で build する場合は、
 `public/download/DeckAgentSetup.exe` をその PC の同じ場所に先に置く（`scp` でよい。`version.json` は git に入っている）。
 
 **確認:**
 
 ```bash
-curl -s https://<盤>/download/agent/version.json          # → {"version":"0.2.0","file":"DeckAgentSetup.exe"}
+curl -s https://<盤>/download/agent/version.json          # → {"version":"<版>","file":"DeckAgentSetup.exe"}
 curl -s -o /dev/null -w '%{http_code} %{size_download}\n' https://<盤>/download/DeckAgentSetup.exe
                                                            # → 200 と 30,000,000 台の数字
 ```
 
-404 が返るなら、焼いたときに `public/download/DeckAgentSetup.exe` が無かった（`build.ps1` を回していない、または別の PC で焼いた）。
+404 が返るなら、イメージを build したときに `public/download/DeckAgentSetup.exe` が無かった（`build.ps1` を回していない、または別の PC で build した）。
 そのイメージのままだと、**盤の ① ダウンロードが 404 で静かに空振りする**（それ以外は普通に動く）。
 
 **コード署名はしていない**（T-028「一旦なし」）。初回実行で Windows の SmartScreen が出ることがある。
