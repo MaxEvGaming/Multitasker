@@ -229,6 +229,7 @@ export async function moveTo(userId, task, toStateId, cause, { silent = false } 
   // press itself, is deliberately not here.
   const WHY = {
     signal: say(lang, 'why.signal'),
+    failure: say(lang, 'why.failure'),
     timeout: say(lang, 'why.timeout'),
     done: say(lang, 'why.done'),
     failed: say(lang, 'why.failed'),
@@ -335,7 +336,10 @@ export async function signal(userId, report, text, event = 'stop') {
   const target = starting ? (state && state.start_to) : (state && state.auto_to);
   if (!target) return { matched: true, moved: false };
 
-  const to = await moveTo(userId, task, target, starting ? 'start' : 'signal');
+  // A stop on an error goes where any stop goes; it is recorded and announced
+  // as its own reason so the phone can say it was an error.
+  const cause = starting ? 'start' : (event === 'failure' ? 'failure' : 'signal');
+  const to = await moveTo(userId, task, target, cause);
   return { matched: true, moved: Boolean(to), to: to ? to.name : null };
 }
 

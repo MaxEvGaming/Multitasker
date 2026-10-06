@@ -117,7 +117,10 @@ export function asEmail(value) {
 export function parseReport(payload) {
   // Optional, and absent in everything Slack-shaped, so a report without it
   // means what reports have always meant: the session has stopped.
-  const event = payload && payload.event === 'start' ? 'start' : 'stop';
+  // `failure` is a stop that ended on an error: it moves like a stop and only
+  // the sentence on the phone differs. Any other value is read as a stop.
+  const event = payload && (payload.event === 'start' || payload.event === 'failure')
+    ? payload.event : 'stop';
 
   // A sealed report carries no name at all: a keyed hash to match on, and the
   // name itself encrypted for whoever owns the board. Nothing here can read it,

@@ -124,7 +124,7 @@ const EN = {
   'settings.hook.locked': 'This board is encrypted, but this device cannot read it — so the key is not shown and the instructions below would be incomplete. Sign out and sign in again with your password to unlock it here.',
   'settings.hook.lockedPrompt': 'Nothing was copied. This board is encrypted, but this device cannot read it, so these instructions would leave out the key — and a setup made from them never moves a square, silently. Sign out and sign in again with your password, then copy this again.',
   'settings.hook.script': 'Download the script',
-  'settings.hook.scriptNote': 'This is the one running here, not an example. Put it somewhere of your own, make a notify.json next to it holding the address below (and the key, if this board is encrypted), and point the Stop and UserPromptSubmit hooks at it.',
+  'settings.hook.scriptNote': 'This is the one running here, not an example. Put it somewhere of your own, make a notify.json next to it holding the address below (and the key, if this board is encrypted), and point the Stop, StopFailure and UserPromptSubmit hooks at it.',
   'settings.hook.url': 'Address to send to',
   'settings.hook.copyUrl': 'Copy the address',
   'settings.hook.regen': 'Make a new address',
@@ -229,6 +229,7 @@ const EN = {
   // Assembled on the phone, by the worker, after it has opened the sealed
   // payload. The server cannot write these: it does not know the words.
   'why.signal': 'Claude has stopped',
+  'why.failure': 'Claude stopped on an error',
   'why.timeout': 'the expected time has passed',
   'why.unmatched': 'no square matches',
   'why.done': 'the PC finished it',
@@ -453,7 +454,7 @@ const JA = {
   'settings.hook.locked': 'このボードは暗号化されていますが、この端末では中身を読めません。そのため鍵は表示されず、下の指示文も不完全になります。一度ログアウトして、パスワードで入り直してください。',
   'settings.hook.lockedPrompt': 'コピーしていません。このボードは暗号化されていますが、この端末では中身を読めないため、この指示文からは鍵が抜け落ちます。それで設定すると、枠は一度も動かないまま、どこにもエラーが出ません。ログアウトしてパスワードで入り直してから、もう一度コピーしてください。',
   'settings.hook.script': 'スクリプトをダウンロード',
-  'settings.hook.scriptNote': 'ここで実際に動いているものです（見本ではありません）。好きな場所に置き、隣に notify.json を作って下の URL（暗号化しているなら鍵も）を入れ、Stop と UserPromptSubmit のフックから呼んでください。',
+  'settings.hook.scriptNote': 'ここで実際に動いているものです（見本ではありません）。好きな場所に置き、隣に notify.json を作って下の URL（暗号化しているなら鍵も）を入れ、Stop・StopFailure・UserPromptSubmit のフックから呼んでください。',
   'settings.hook.url': '送り先の URL',
   'settings.hook.copyUrl': 'URL をコピー',
   'settings.hook.regen': 'URL を作り直す',
@@ -556,6 +557,7 @@ const JA = {
   'dialog.duration.start': '開始',
 
   'why.signal': 'Claude が手を止めました',
+  'why.failure': 'Claude がエラーで止まりました',
   'why.timeout': '予想時間を過ぎました',
   'why.unmatched': '対応する枠がありません',
   'why.done': 'PC が実行を終えました',

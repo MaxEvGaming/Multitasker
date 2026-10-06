@@ -18,7 +18,7 @@ import { t, setLang } from '/i18n.js';
 // session, so it cannot go and ask, and the phone may have been asleep since
 // before the language was last changed.
 const REASON = {
-  signal: 'why.signal', timeout: 'why.timeout', unmatched: 'why.unmatched',
+  signal: 'why.signal', failure: 'why.failure', timeout: 'why.timeout', unmatched: 'why.unmatched',
   // The PC's answers to a command square, and the absence of one.
   done: 'why.done', failed: 'why.failed', expired: 'why.expired',
 };

@@ -214,6 +214,11 @@ function fromHook(raw) {
   //   Stop                     — the turn ended, which is the same fact
   // Stop is the one proven to run in the desktop app. permission_prompt cannot
   // fire here at all: the owner runs in bypassPermissions, so nothing ever asks.
+  //
+  // A turn that ends on an API error — a usage limit, an overloaded server —
+  // fires StopFailure instead of Stop, and without this the square stays on
+  // running for good. It is a stop like any other, said differently. Every
+  // error_type is taken: which one a usage limit arrives as is not written down.
   const event = hook.hook_event_name || '';
   const type = hook.notification_type || '';
 
@@ -224,9 +229,12 @@ function fromHook(raw) {
 
   let wording = WORDING[type];
   if (!wording && event === 'Stop') wording = '入力待ちです';
+  const failure = !wording && event === 'StopFailure';
+  if (failure) wording = 'エラーで止まりました';
   if (!wording) { log(`skip: unhandled event="${event}" type="${type}"`); return null; }
 
-  return { title: sessionTitle(hook.session_id, hook.cwd), body: wording, session: hook.session_id, transcript: hook.transcript_path };
+  return { title: sessionTitle(hook.session_id, hook.cwd), body: wording, session: hook.session_id, transcript: hook.transcript_path,
+    ...(failure ? { failure: String(hook.error_type || 'unknown') } : {}) };
 }
 
 // Refuses to send anything readable unless that is asked for outright.
@@ -242,17 +250,21 @@ function payloadFor(config, message) {
   const masterB64 = config.key || '';
   const master = masterB64 ? fromB64url(masterB64) : null;
   if (!master && !config.allowPlaintext) return null;
-  const starting = message.event === 'start' ? { event: 'start' } : {};
+  // Said in the clear, sealed board or not: the board has to know the stop came
+  // from an error to say so on the phone, and "it was an error" is all it learns
+  // — not which error, not which session.
+  const marker = message.event === 'start' ? { event: 'start' }
+    : message.failure ? { event: 'failure' } : {};
   return master
     // Nothing readable: a hash to match on, and the name sealed for its owner.
     ? {
       matchHash: blindIndex(master, message.title),
       nameCipher: sealText(master, message.title),
-      ...starting,
+      ...marker,
     }
     : {
       text: `*${message.title}* — ${message.body}`,
-      ...starting,
+      ...marker,
     };
 }
 
@@ -338,7 +350,10 @@ async function main() {
   // one in a chain is a real stop.
   const quietSeconds = Number(config.quietSeconds) > 0 ? Number(config.quietSeconds) : 90;
 
-  if (args.hook && !args.start) {
+  // Not for a stop on an error: the session has stopped whatever is still
+  // running behind it, and waiting on that work would leave the square on
+  // running — the very thing this is here to fix.
+  if (args.hook && !args.start && !message.failure) {
     const open = unfinishedWork(message.transcript);
     if (open.size > 0) {
       log(`skip: ${open.size} background job(s) still running (${[...open].join(', ')})`);
@@ -348,13 +363,15 @@ async function main() {
 
   if (args.hook && !args.deliver) {
     const nonce = `${Date.now()}-${process.pid}`;
-    writePending(message.session, { nonce, title: message.title, body: message.body, url, transcript: message.transcript });
+    writePending(message.session, { nonce, title: message.title, body: message.body, url, transcript: message.transcript,
+      ...(message.failure ? { failure: message.failure } : {}) });
     // Detached: the hook must return at once or it holds up the session.
     const child = spawn(process.execPath, [__filename, '--deliver', message.session, nonce], {
       detached: true, stdio: 'ignore', windowsHide: true,
     });
     child.unref();
-    log(`held ${quietSeconds}s: ${message.title} / ${message.body}`);
+    log(`held ${quietSeconds}s: ${message.title} / ${message.body}`
+      + (message.failure ? ` (StopFailure ${message.failure} — background work not checked)` : ''));
     return;
   }
 
@@ -404,7 +421,9 @@ async function deliver(session, nonce, quietSeconds) {
   // The session can pick work back up during the hold — an agent finishes and
   // the next turn starts — and sending "waiting for you" then is exactly the
   // complaint this whole mechanism exists to answer. Look again before sending.
-  const open = unfinishedWork(record.transcript);
+  // Except after an error stop, for the same reason it was not looked at when
+  // the hook fired.
+  const open = record.failure ? new Set() : unfinishedWork(record.transcript);
   if (open.size > 0) {
     log(`dropped at delivery: ${record.title} started ${open.size} job(s) during the hold`);
     return;

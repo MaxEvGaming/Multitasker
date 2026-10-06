@@ -37,6 +37,7 @@ const EN = {
   // Read on a phone, so they follow the account rather than the server.
   'square': 'Square {n}',
   'why.signal': 'Claude has stopped',
+  'why.failure': 'Claude stopped on an error',
   'why.timeout': 'the expected time has passed',
   'why.unmatched': 'no square matches',
   'why.unknownSession': 'an unknown session',
@@ -91,6 +92,7 @@ const JA = {
 
   'square': '枠 {n}',
   'why.signal': 'Claude が手を止めました',
+  'why.failure': 'Claude がエラーで止まりました',
   'why.timeout': '予想時間を過ぎました',
   'why.unmatched': '対応する枠がありません',
   'why.unknownSession': '不明なセッション',
