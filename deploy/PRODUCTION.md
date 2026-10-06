@@ -277,7 +277,7 @@ docker exec <pg> psql -U <ユーザー> -c "drop database restore_check;"
 **サーバーは Graviton（arm64）。** x86 の PC で普通に `docker build` すると
 動かないイメージができる。`--platform linux/arm64` が要る。
 
-**【デプロイ PC / Git Bash】** 一発で流す（2026-09-14 差し替え、2026-09-16 訂正、2026-10-05 フォルダと clone し直しを訂正）。**どの段で失敗しても止まり、最後に「載った版＝送った版」を照合する。**
+**【デプロイ PC / Git Bash】** 一発で流す（2026-09-14 差し替え、2026-09-16 訂正、2026-10-05 フォルダと clone し直しを訂正、2026-10-06 止まらなかった囲い方を訂正）。**どの段で失敗しても止まり、最後に「載った版＝送った版」を照合する。**
 それまでの形（`… ; docker save …`）は、`git pull` や `build.ps1` が失敗しても `;` の後へ進んで**手元に残った古いイメージを送り、健康確認が通るので成功に見えた**（T-086）。
 
 **`<リポジトリ>` は、GitHub の `MaxEvGaming/Multitasker` を clone したフォルダ（一番上に `Dockerfile` と `agent/` がある所）。**
@@ -291,12 +291,13 @@ git clone https://github.com/MaxEvGaming/Multitasker.git <新しいフォルダ>
 `public/download/DeckAgentSetup.exe` は git に入っていないので、新しいフォルダには無い。下の手順の中の `build.ps1` が作るので、手で写す必要は無い
 （その PC に .NET 10 SDK と Inno Setup 6.3+ が要る。§7.6）。
 
-**全体を `(` と `)` で囲ってある。外すと、貼り付けた Git Bash そのものが `set -e` で終了して窓が閉じ、失敗した段のエラーが読めない**（2026-09-16 T-097＝「途中でクラッシュする」ように見えた）。囲ってあれば、失敗した段で止まり、そのエラーと `== 失敗:` の行が画面に残る。
+**全体を `(` と `)` で囲い、`set -eo pipefail` を掛けてある。** 外すと、貼り付けた Git Bash そのものが終了して窓が閉じ、失敗した段のエラーが読めない（2026-09-16 T-097）。
+**囲いのあとを `|| echo …` にしてはいけない。** bash は `||` の左に置かれたものの中では `set -e` を効かせないので、途中の段が失敗しても最後まで走る（2026-10-06 に実際に起きた。`git pull --ff-only` が失敗したのに先へ進み、古い中身のまま build と入れ替えが走って、版の照合も同じ版どうしで「OK」になった）。だから終わりは `); rc=$?; [ $rc -eq 0 ] || echo …` の形にしてある。`pipefail` は、`docker save | gzip | ssh` のような管の途中の失敗でも止めるため。
 
 ```bash
 KEY=<鍵>; HOST=<ユーザー>@<サーバー>; BOARD=https://<盤>; H=/home/<ユーザー>; DB=board; WEB=<Caddy と同じネットワーク>; CADDY=<Caddy のコンテナ名>
 (
-set -e
+set -eo pipefail
 cd <リポジトリ>
 git pull --ff-only
 echo "== deploying $(git log --oneline -1)"
@@ -327,7 +328,7 @@ docker exec $CADDY caddy reload --config /etc/caddy/Caddyfile
 docker logs taskboard | tail -1"
 GOT=$(curl -s $BOARD/download/agent/version.json)
 [ "$GOT" = "$WANT" ] && echo "== OK: live $GOT" || { echo "== NOT UPDATED: live $GOT, wanted $WANT"; exit 1; }
-) || echo "== 失敗: すぐ上のエラーの段で止まりました（サーバーの古い方は動いたまま）"
+); rc=$?; [ $rc -eq 0 ] || echo "== 失敗（rc=$rc）: すぐ上のエラーの段で止まりました（サーバーの古い方は動いたまま）"
 ```
 
 最後の行が `== OK: live {"version":…}` で終わらなければ**更新されていない**。途中で止まったなら、`== 失敗:` の直前にその段のエラーが出ている。それを見てから直す。
