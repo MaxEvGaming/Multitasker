@@ -1,4 +1,5 @@
 import { settingsOrder } from '/settings-order.js';
+import { pageAfterSwipe } from '/swipe.js';
 import {
   pairLink, normalizeUrl, isMobile, TEXT_MAX, textTooLong, TEXT_MODES, textMode, markerLabel, markerArgs,
 } from '/pair.js';
@@ -1857,9 +1858,10 @@ function enableSwipe() {
     state.board.pages.findIndex((p) => String(p.id) === String(state.board.page));
 
   async function goTo(offset) {
-    const from = pageIndex();
-    const to = from + offset;
-    if (from < 0 || to < 0 || to >= state.board.pages.length) { slide(0, true); return false; }
+    // The pages go round: past the last is the first, before the first is the
+    // last (public/swipe.js). Only a single page goes nowhere.
+    const to = pageAfterSwipe(pageIndex(), offset, state.board.pages.length);
+    if (to < 0) { slide(0, true); return false; }
 
     // Out to the side, swap, then in from the other side.
     slide(-offset * window.innerWidth * DRAG, true);

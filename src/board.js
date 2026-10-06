@@ -405,7 +405,7 @@ export async function addSlot(userId, pageId) {
 // and shuffling someone else aside is not what was asked for.
 export async function moveSlot(userId, taskId, toPageId) {
   const lang = await langOf(userId);
-  const task = await one('select id from tasks where id = $2 and user_id = $1', [userId, taskId]);
+  const task = await one('select id, page_id from tasks where id = $2 and user_id = $1', [userId, taskId]);
   if (!task) return { ok: false, error: say(lang, 'task.noSquare') };
 
   // Checked against this account rather than trusted: the page id arrives from
@@ -414,13 +414,18 @@ export async function moveSlot(userId, taskId, toPageId) {
   const page = await one('select id from pages where id = $2 and user_id = $1', [userId, toPageId]);
   if (!page) return { ok: false, error: say(lang, 'page.gone') };
 
-  await q(
-    `update tasks
-        set page_id = $3,
-            slot = coalesce((select max(slot) + 1 from tasks where page_id = $3), 0)
-      where id = $2 and user_id = $1`,
-    [userId, taskId, page.id]
-  );
+  // The page it left closes up behind it, in the same transaction, so the
+  // numbers never show a hole even for a moment.
+  await tx(async (client) => {
+    await client.query(
+      `update tasks
+          set page_id = $3,
+              slot = coalesce((select max(slot) + 1 from tasks where page_id = $3), 0)
+        where id = $2 and user_id = $1`,
+      [userId, taskId, page.id]
+    );
+    await closeGaps(client, task.page_id);
+  });
   return { ok: true };
 }
 
@@ -456,6 +461,41 @@ export async function reorderSlot(userId, taskId, direction) {
 }
 
 export async function deleteSlot(userId, taskId) {
-  await q('delete from tasks where id = $2 and user_id = $1', [userId, taskId]);
+  await tx(async (client) => {
+    const { rows } = await client.query(
+      'delete from tasks where id = $2 and user_id = $1 returning page_id', [userId, taskId]);
+    if (rows.length) await closeGaps(client, rows[0].page_id);
+  });
   return { ok: true };
+}
+
+// Numbering a page's squares 0, 1, 2… again after one has left it, keeping the
+// order they were in. A square with no title shows its number ("Square 3"), so
+// a hole left by a deleted square would otherwise show as a missing number.
+//
+// Positions are unique per page, so the renumbering cannot write straight over
+// itself: a square moving from 5 to 4 would collide with the one still on 4
+// until that one moves too. Every square that has to move steps out to a
+// negative number first — a place no real square occupies — and then to where
+// it belongs. Only this page is touched, and only squares whose number changes.
+async function closeGaps(client, pageId) {
+  const { rows } = await client.query(
+    'select id, slot from tasks where page_id = $1 order by slot, id for update', [pageId]);
+  const moving = rows
+    .map((row, pos) => ({ id: row.id, from: row.slot, to: pos }))
+    .filter((row) => row.from !== row.to);
+  if (moving.length === 0) return;
+
+  const ids = moving.map((row) => row.id);
+  const positions = moving.map((row) => row.to);
+  await client.query(
+    `update tasks set slot = -1 - x.pos
+       from unnest($1::bigint[], $2::int[]) as x(id, pos)
+      where tasks.id = x.id`,
+    [ids, positions]);
+  await client.query(
+    `update tasks set slot = x.pos
+       from unnest($1::bigint[], $2::int[]) as x(id, pos)
+      where tasks.id = x.id`,
+    [ids, positions]);
 }
